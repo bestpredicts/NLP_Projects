@@ -1,5 +1,6 @@
-import functools
-print = functools.partial(print, flush=True)
+# import functools
+# print = functools.partial(print, flush=True)
+from funcsigs import signature
 import torch
 import torch.autograd as autograd
 from torch.autograd import Variable
@@ -17,9 +18,9 @@ from Decoder import Decoder
 from Hyperparameters import args
 from collections import namedtuple
 import pandas as pd
-import logging
+# import logging
 import os
-from helper_functions import log_anything
+# from helper_functions import log_anything
 import LSTM_IB_GAN_mimic
 import LSTM_IB_GAN_mimic_ce
 from textdataMimic import TextDataMimic, Batch
@@ -27,6 +28,8 @@ from LanguageModel_mimic import LanguageModel
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.metrics import f1_score
+from sklearn.metrics import roc_auc_score, precision_recall_curve, roc_curve, auc, confusion_matrix, classification_report
 
 # a function  to create and save logs in the log files
 
@@ -97,6 +100,93 @@ def main():
 
         output_dir = args["output_dir"]
 
+    def vote_score(df, score, output_dir):
+        df['pred_score'] = score
+
+        # print(f"df inside of vote score is: {df}")
+
+        # print(len(df))
+        # print(len(score))
+        df_sort = df.sort_values(by=['ID'])
+        # score
+        temp = (df_sort.groupby(['ID'])['pred_score'].agg(max) + df_sort.groupby(['ID'])['pred_score'].agg(sum) / 2) / (
+                1 + df_sort.groupby(['ID'])['pred_score'].agg(len) / 2)
+        x = df_sort.groupby(['ID'])['Label'].agg(np.min).values
+        df_out = pd.DataFrame({'logits': temp.values, 'ID': x})
+
+        fpr, tpr, thresholds = roc_curve(x, temp.values)
+        auc_score = auc(fpr, tpr)
+
+        plt.figure(1)
+        plt.plot([0, 1], [0, 1], 'k--')
+        plt.plot(fpr, tpr, label='Val (area = {:.3f})'.format(auc_score))
+        plt.xlabel('False positive rate')
+        plt.ylabel('True positive rate')
+        plt.title('ROC curve')
+        plt.legend(loc='best')
+
+        plt.savefig(f'{output_dir}/auroc_BioClinicalbert_discharge.png')
+        plt.show()
+
+        #     string = 'auroc_clinicalbert_' + args.readmission_mode + '.png'
+        #     plt.savefig(os.path.join(args.output_dir, string))
+
+        return fpr, tpr, df_out
+
+
+    def pr_curve_plot(y, y_score, output_dir):
+        print("making pr_curve_plot")
+        precision, recall, _ = precision_recall_curve(y, y_score)
+        area = auc(recall, precision)
+        step_kwargs = ({'step': 'post'}
+                       if 'step' in signature(plt.fill_between).parameters
+                       else {})
+
+        plt.figure(2)
+        plt.step(recall, precision, color='b', alpha=0.2,
+                 where='post')
+        plt.fill_between(recall, precision, alpha=0.2, color='b', **step_kwargs)
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.ylim([0.0, 1.05])
+        plt.xlim([0.0, 1.0])
+        plt.title('Precision-Recall curve: AUC={0:0.2f}'.format(
+            area))
+
+        plt.savefig(f'{output_dir}/auprc_BioClinicalbert_discharge.png')
+        plt.show()
+
+
+    #     string = 'auprc_clinicalbert_' + args.readmission_mode + '.png'
+
+    #     plt.savefig(os.path.join(args.output_dir, string))
+
+
+    def vote_pr_curve(df, score, output_dir):
+        df['pred_score'] = score
+        df_sort = df.sort_values(by=['ID'])
+        # score
+        temp = (df_sort.groupby(['ID'])['pred_score'].agg(max) + df_sort.groupby(['ID'])['pred_score'].agg(sum) / 2) / (
+                1 + df_sort.groupby(['ID'])['pred_score'].agg(len) / 2)
+        y = df_sort.groupby(['ID'])['Label'].agg(np.min).values
+
+        precision, recall, thres = precision_recall_curve(y, temp)
+        pr_thres = pd.DataFrame(data=list(zip(precision, recall, thres)), columns=['prec', 'recall', 'thres'])
+        vote_df = pd.DataFrame(data=list(zip(temp, y)), columns=['score', 'label'])
+
+        pr_curve_plot(y, temp, output_dir)
+
+        temp = pr_thres[pr_thres.prec > 0.799999].reset_index()
+
+        rp80 = 0
+        if temp.size == 0:
+            print('Test Sample too small or RP80=0')
+        else:
+            rp80 = temp.iloc[0].recall
+            print('Recall at Precision of 80 is {}', rp80)
+
+        return rp80
+
 
 
     def test(textData, model, datasetname, max_accuracy=-1, eps = 1e-6):
@@ -122,7 +212,9 @@ def main():
         total_samples_seen = 0
 
         output_probs_history = []
+        output_labels_history = []
         true_labels_history = []
+
 
         batch_chosen_words_dfs =[]
 
@@ -143,7 +235,7 @@ def main():
                 # print("enoder inputer is: ", x['enc_input'])
                 output_probs, sampled_words = model.predict(x)
 
-                output_probs_history.append(output_probs.flatten().cpu().numpy())
+
 
 
 
@@ -155,7 +247,11 @@ def main():
                 # use below for  converting from gpu to cpu
                 true_labels = x['labels'].long().flatten().cpu().numpy()
 
-                true_labels_history.append(true_labels)
+
+
+                true_labels_history = true_labels_history + true_labels.tolist()
+                output_labels_history = output_labels_history + output_labels.tolist()
+                output_probs_history  = output_probs_history + output_probs.flatten().tolist()
 
                 # use below if already runinng on cpy
                 # true_labels = x['labels'].long().flatten().numpy()
@@ -299,23 +395,33 @@ def main():
                 right += sum(batch_correct)
                 total += x['enc_input'].size()[0]
 
-            print("printing lenths of output probs and true labels histories")
-            print(len(output_probs_history))
-            print(len(true_labels_history))
+            # print("printing lenths of output probs and true labels histories")
+            # print(len(output_probs_history))
+            # print(len(true_labels_history))
+
+            # print(output_probs_history)
+            # print(true_labels_history)
+            # print(output_labels_history)
+
+
+
+
+
+            # output_probs_history = np.concatenate(output_probs_history, axis = 0)
+            # true_labels_history = np.concatenate(true_labels_history, axis = 0)
+            #
+            # print("AFTER concat! ++++++ printing lenths of output probs and true labels histories")
+            # print(len(output_probs_history))
+            # print(len(true_labels_history))
 
             res = {}
 
             res['accuracy'] = right / total
-            P_c = TP_c / (TP_c + FP_c + eps)
-            R_c = TP_c / (TP_c + FN_c + eps)
-            F_c = 2 * P_c * R_c / (P_c + R_c + eps)
-            res['F_macro'] = np.mean(F_c)
-            res['MP'] = np.mean(P_c)
-            res['MR'] = np.mean(R_c)
 
             P_c = TP_c / (TP_c + FP_c)
             R_c = TP_c / (TP_c + FN_c)
             F_c = 2 * P_c * R_c / (P_c + R_c)
+
             res['F_macro_n '] = np.nanmean(F_c)
             res['MP_n'] = np.nanmean(P_c)
             res['MR_n'] = np.nanmean(R_c)
@@ -323,6 +429,25 @@ def main():
             print("finished testing! ")
 
             accuracy = res['accuracy']
+
+            print(classification_report(true_labels_history, output_labels_history))
+            # save classification report as a dataframe to csv
+            pd.DataFrame(classification_report(true_labels_history, output_labels_history, output_dict=True)).to_csv(
+                f"{output_dir}/classification_report.csv")
+
+            df_test = pd.read_csv("../clinicalBERT/data/discharge/test.csv")
+            print(df_test.shape)
+
+            # print("length of output_probs_history: ", output_probs_history)
+            #
+            # print(output_probs_history)
+            # print(output_labels_history)
+            # print(true_labels_history)
+
+
+            fpr, tpr, df_out = vote_score(df_test, output_probs_history, output_dir)
+
+            rp80 = vote_pr_curve(df_test, output_probs_history, output_dir)
 
             # print("accuracy based on right/total is: ", accuracy)
 
@@ -337,13 +462,15 @@ def main():
 
             print("saving batch dfs to csv")
             all_batch_chosen_words = pd.concat(batch_chosen_words_dfs)
-            all_batch_chosen_words.to_csv(f"{output_dir}_batch_all_chosen_words.csv")
+
+            print("shpae of all_batch_chosen_words: ", all_batch_chosen_words.shape)
+            all_batch_chosen_words.to_csv(f"{output_dir}/batch_all_chosen_words.csv")
 
         return res, all_chosen_words
 
-    eval_stats, all_chosen_words = test(textData,G_model,'test', max_accuracy=-1)
-    # #
-    print("eval_stats: ", eval_stats)
+    # eval_stats, all_chosen_words = test(textData,G_model,'test', max_accuracy=-1)
+    # # #
+    # print("eval_stats: ", eval_stats)
 
 
 
@@ -438,12 +565,7 @@ def main():
         # print("chosen words from sample: ", [all_chosen_words])
         # print(len(all_chosen_words ))
 
-        batch_chosen_words_dfs.to_csv(f"{output_dir}_test_sample_chosen_words.csv")
-
-
-
-
-
+        batch_chosen_words_dfs.to_csv(f"{output_dir}/test_sample_chosen_words.csv")
 
 
         # for w, choice in zip(batch.encoderSeqs[0], sampled_words):
@@ -470,86 +592,60 @@ def main():
     # test_results = get_metrics_one(G_model,test_batch)
 
 
-    def vote_score(df, score, output_dir):
-        df['pred_score'] = score
-        df_sort = df.sort_values(by=['ID'])
-        # score
-        temp = (df_sort.groupby(['ID'])['pred_score'].agg(max) + df_sort.groupby(['ID'])['pred_score'].agg(sum) / 2) / (
-                1 + df_sort.groupby(['ID'])['pred_score'].agg(len) / 2)
-        x = df_sort.groupby(['ID'])['Label'].agg(np.min).values
-        df_out = pd.DataFrame({'logits': temp.values, 'ID': x})
+    def sentence2results(model, sentence):
+        print(f"getting chosen words for following sentence \n {sentence}")
 
-        fpr, tpr, thresholds = roc_curve(x, temp.values)
-        auc_score = auc(fpr, tpr)
+        batch = textData.sentence2batch(sentence)
+        x = {}
+        x['enc_input'] = autograd.Variable(torch.LongTensor(batch.encoderSeqs)).to(args['device'])
+        x['enc_len'] = torch.LongTensor(batch.encoder_lens).to(args['device'])
+        x['labels'] = autograd.Variable(torch.FloatTensor(batch.label).unsqueeze(1)).to(args['device'])
+        output_probs, sampled_words = model.predict(x)
 
-        plt.figure(1)
-        plt.plot([0, 1], [0, 1], 'k--')
-        plt.plot(fpr, tpr, label='Val (area = {:.3f})'.format(auc_score))
-        plt.xlabel('False positive rate')
-        plt.ylabel('True positive rate')
-        plt.title('ROC curve')
-        plt.legend(loc='best')
+        output_labels = np.asarray([1 if i else 0 for i in (output_probs.flatten() >= 0.5)])
 
-        plt.savefig(f'{output_dir}_auroc_BioClinicalbert_3day.png')
-        plt.show()
+        all_chosen_words = []
+        all_not_chosen_words = []
+        chosen_enc_seqs = []
+        not_chosen_enc_seqs = []
 
-        #     string = 'auroc_clinicalbert_' + args.readmission_mode + '.png'
-        #     plt.savefig(os.path.join(args.output_dir, string))
+        words_from_sample = []
+        for w, choice in zip(batch.encoderSeqs[0], sampled_words[0]):
+            # print("word is: ", textData.index2word[w])
+            # print("choice is: ", choice)
+            if choice == 1:
+                print("word was chosen for sample/z_nero: ")
+                print(f'<***{textData.index2word[w]}***>   \n')
+                all_chosen_words.append(textData.index2word[w])
+                chosen_enc_seqs.append(w)
+            else:
+            #     print("\nthis word wasn't!")
+            #     print(textData.index2word[w], end=' ')
+                all_not_chosen_words.append(textData.index2word[w])
+                not_chosen_enc_seqs.append(w)
 
-        return fpr, tpr, df_out
-
-
-    def pr_curve_plot(y, y_score, output_dir):
-        precision, recall, _ = precision_recall_curve(y, y_score)
-        area = auc(recall, precision)
-        step_kwargs = ({'step': 'post'}
-                       if 'step' in signature(plt.fill_between).parameters
-                       else {})
-
-        plt.figure(2)
-        plt.step(recall, precision, color='b', alpha=0.2,
-                 where='post')
-        plt.fill_between(recall, precision, alpha=0.2, color='b', **step_kwargs)
-        plt.xlabel('Recall')
-        plt.ylabel('Precision')
-        plt.ylim([0.0, 1.05])
-        plt.xlim([0.0, 1.0])
-        plt.title('Precision-Recall curve: AUC={0:0.2f}'.format(
-            area))
-
-        plt.savefig(f'{output_dir}auprc_BioClinicalbert_3day.png')
-        plt.show()
+            words_from_sample.append(textData.index2word[w])
 
 
-    #     string = 'auprc_clinicalbert_' + args.readmission_mode + '.png'
 
-    #     plt.savefig(os.path.join(args.output_dir, string))
+        chosen_words_df =  pd.DataFrame({"raw_sentence": batch.raw, "chosen_words": [all_chosen_words],
+                      "words_not_chosen": [all_not_chosen_words], "predicted_label": output_labels,
+                      "enq_seq_chosen": [chosen_enc_seqs], "enq_seq_not_chosen": [not_chosen_enc_seqs]})
 
+        # print(batch_chosen_words_dfs)
 
-    def vote_pr_curve(df, score, output_dir):
-        df['pred_score'] = score
-        df_sort = df.sort_values(by=['ID'])
-        # score
-        temp = (df_sort.groupby(['ID'])['pred_score'].agg(max) + df_sort.groupby(['ID'])['pred_score'].agg(sum) / 2) / (
-                1 + df_sort.groupby(['ID'])['pred_score'].agg(len) / 2)
-        y = df_sort.groupby(['ID'])['Label'].agg(np.min).values
+        # print("original raw sentence words: ", batch.raw)
+        # print(len(batch.raw))
+        # print("##############################")
+        # print("sampled words for model: ", words_from_sample)
+        # print("##############################")
+        # print("chosen words from sample: ", [all_chosen_words])
+        # print(len(all_chosen_words ))
 
-        precision, recall, thres = precision_recall_curve(y, temp)
-        pr_thres = pd.DataFrame(data=list(zip(precision, recall, thres)), columns=['prec', 'recall', 'thres'])
-        vote_df = pd.DataFrame(data=list(zip(temp, y)), columns=['score', 'label'])
+        chosen_words_df.to_csv(f"{output_dir}/test_setence_chosen_words.csv")
 
-        pr_curve_plot(y, temp, output_dir)
+    sentence2results(G_model,"they had heart pain and drugs. One flew over a cuckoos nest. Bla bla bla. This isn't useful. They are really very healthy. Cheesecake. Lol.")
 
-        temp = pr_thres[pr_thres.prec > 0.799999].reset_index()
-
-        rp80 = 0
-        if temp.size == 0:
-            print('Test Sample too small or RP80=0')
-        else:
-            rp80 = temp.iloc[0].recall
-            print('Recall at Precision of 80 is {}', rp80)
-
-        return rp80
 
 if __name__ == "__main__":
 
@@ -589,8 +685,12 @@ if __name__ == "__main__":
         args['date'] = str(date.today())
 
     if cmdargs.model_dir is None:
-        args['model_dir'] = "./artifacts/LSTM_IB_GAN_be_mimic3_new_embs2021-05-11.pt"
+        args['model_dir'] = "./artifacts/LSTM_IB_GAN_be_mimic3_new_embs2021-05-12.pt"
         args['output_dir'] = args['model_dir'][:-3]
+
+    # Create output directory if needed
+    if not os.path.exists(args['output_dir']):
+        os.makedirs(args['output_dir'])
 
 
     full_model = False
@@ -599,4 +699,3 @@ if __name__ == "__main__":
                              big_emb=args['big_emb'])
     LM = torch.load(args['rootDir'] + '/LMmimic.pkl', map_location=args['device'])
     main()
-
