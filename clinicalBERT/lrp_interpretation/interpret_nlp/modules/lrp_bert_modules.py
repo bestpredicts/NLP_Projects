@@ -1,5 +1,6 @@
 from typing import Tuple
-
+import sys
+sys.path.append("../")
 import numpy as np
 from torch import nn
 from transformers.models.bert import modeling_bert as bert

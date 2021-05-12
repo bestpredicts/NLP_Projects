@@ -808,6 +808,9 @@ def main():
         rp80 = vote_pr_curve(df_test, logits_history, args)
 
         print(classification_report(true_labels, pred_labels))
+        # save classification report as a dataframe to csv
+        pd.DataFrame(classification_report(true_labels, pred_labels, output_dict=True)).to_csv(
+            f"{args.output_dir}/classification_report.csv")
 
         cf = confusion_matrix(true_labels, pred_labels, normalize='true')
         df_cf = pd.DataFrame(cf, ['not r/a', 'readmitted'], ['not r/a', 'readmitted'])
