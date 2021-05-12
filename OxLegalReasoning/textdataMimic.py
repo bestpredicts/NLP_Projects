@@ -60,7 +60,7 @@ class TextDataMimic:
         # self.embfile = "../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model"
         # self.big_embfile = "../clinicalBERT/word2vec+fastText/word2vec+fastText/BioWordVec_PubMed_MIMICIII_d200.vec.bin"
         #use if on vm
-        #         self.embfile = "../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model"
+        # self.embfile = "../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model"
         self.embfile = "./data/mimic3/new_mimic_word2vec_200.model"
         print(f"using this embedding model:{self.embfile} ")
         # self.embfile = "./data/mimic3/new_mimic_word2vec.model"
@@ -540,27 +540,43 @@ class TextDataMimic:
             sequence.append(batchSeq[i][seqId])
         return self.sequence2str(sequence, **kwargs)
 
-    def sentence2enco(self, sentence):
+    def sentence2batch(self, sentence):
         """Encode a sequence and return a batch as an input for the model
         Return:
             Batch: a batch object containing the sentence, or none if something went wrong
         """
-
+        print("the sentence was: ", sentence)
         if sentence == '':
             return None
 
         # First step: Divide the sentence in token
         tokens = nltk.word_tokenize(sentence)
-        if len(tokens) > args['maxLength']:
+        if len(tokens) > 512:
             return None
 
+        print("tokens are: ", tokens)
         # Second step: Convert the token in word ids
-        wordIds = []
-        for token in tokens:
-            wordIds.append(self.getWordId(token, create=False))  # Create the vocabulary and the training sentences
+        #         wordIds = []
+        #         for token in tokens:
+        #             print(f"converting token {token} to word ID")
+        #             wordIds.append(self.get_word_ids(token))  # Create the vocabulary and the training sentences
 
+        wordIds = self.get_word_ids(tokens)
+
+        print("wordIds after gettitng ids: ", wordIds)
         # Third step: creating the batch (add padding, reverse)
-        batch = self._createBatch([[wordIds, []]])  # Mono batch, no target output
+        #         batch = self._createBatch([[wordIds, []]])  # Mono batch, no target output
+        batch = Batch()
+
+        batch.encoderSeqs.append(wordIds)
+        batch.encoder_lens.append(len(wordIds))
+        batch.label.append([0])
+        batch.rationals.append([-1])
+        batch.raw.append(tokens)
+
+        maxlen_enc = 512
+        batch.encoderSeqs[0] = batch.encoderSeqs[0] + [self.word2index['PAD']] * (
+                maxlen_enc - len(batch.encoderSeqs[0]))
 
         return batch
 
