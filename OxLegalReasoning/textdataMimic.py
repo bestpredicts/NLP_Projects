@@ -37,7 +37,7 @@ class TextDataMimic:
     Warning: No vocabulary limit
     """
 
-    def __init__(self, corpusname, datadir, taskname, trainLM=False, test_phase=True, big_emb=False):
+    def __init__(self, corpusname, datadir, taskname,embedding_file, trainLM=False, test_phase=True, big_emb=False):
 
         """Load all conversations
         Args:
@@ -61,7 +61,8 @@ class TextDataMimic:
         # self.big_embfile = "../clinicalBERT/word2vec+fastText/word2vec+fastText/BioWordVec_PubMed_MIMICIII_d200.vec.bin"
         #use if on vm
         # self.embfile = "../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model"
-        self.embfile = "./data/mimic3/new_mimic_word2vec_200.model"
+
+        self.embfile = embedding_file
         print(f"using this embedding model:{self.embfile} ")
         # self.embfile = "./data/mimic3/new_mimic_word2vec.model"
         self.big_embfile = "../clinicalBERT/word2vec+fastText/BioWordVec_PubMed_MIMICIII_d200.vec.bin"
@@ -101,7 +102,7 @@ class TextDataMimic:
         if self.big_emb:
             self.data_dump_path = f"{self.basedir}/mimic3_processed_bigembed_{self.taskname}.pkl"
         else:
-            self.data_dump_path = f"{self.basedir}/mimic3_processed_{self.taskname}.pkl"
+            self.data_dump_path = f"{self.basedir}/mimic3_processed_originalembs_{self.taskname}.pkl"
 
         print(self.data_dump_path)
         datasetExist = os.path.isfile(self.data_dump_path)

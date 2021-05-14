@@ -27,6 +27,11 @@ from textdataMimic import TextDataMimic, Batch
 from LanguageModel_mimic import LanguageModel
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+
+# import logging
+# mpl_logger = logging.getLogger('matplotlib')
+# mpl_logger.setLevel(logging.WARNING)
+
 import seaborn as sns
 from sklearn.metrics import f1_score
 from sklearn.metrics import roc_auc_score, precision_recall_curve, roc_curve, auc, confusion_matrix, classification_report
@@ -101,6 +106,7 @@ def main():
         output_dir = args["output_dir"]
 
     def vote_score(df, score, output_dir):
+        print("doing vote score stuff")
         df['pred_score'] = score
 
         # print(f"df inside of vote score is: {df}")
@@ -126,7 +132,7 @@ def main():
         plt.legend(loc='best')
 
         plt.savefig(f'{output_dir}/auroc_BioClinicalbert_discharge.png')
-        plt.show()
+        # plt.show()
 
         #     string = 'auroc_clinicalbert_' + args.readmission_mode + '.png'
         #     plt.savefig(os.path.join(args.output_dir, string))
@@ -154,7 +160,7 @@ def main():
             area))
 
         plt.savefig(f'{output_dir}/auprc_BioClinicalbert_discharge.png')
-        plt.show()
+        # plt.show()
 
 
     #     string = 'auprc_clinicalbert_' + args.readmission_mode + '.png'
@@ -163,6 +169,7 @@ def main():
 
 
     def vote_pr_curve(df, score, output_dir):
+        print("inside vote_pr_curve")
         df['pred_score'] = score
         df_sort = df.sort_values(by=['ID'])
         # score
@@ -445,9 +452,16 @@ def main():
             # print(true_labels_history)
 
 
-            fpr, tpr, df_out = vote_score(df_test, output_probs_history, output_dir)
+            # fpr, tpr, df_out = vote_score(df_test, output_probs_history, output_dir)
 
-            rp80 = vote_pr_curve(df_test, output_probs_history, output_dir)
+            # rp80 = vote_pr_curve(df_test, output_probs_history, output_dir)
+
+            cf = confusion_matrix(true_labels_history, output_labels_history, normalize='true')
+            df_cf = pd.DataFrame(cf, ['not r/a', 'readmitted'], ['not r/a', 'readmitted'])
+            plt.figure(figsize=(6, 6))
+            plt.suptitle("Readmitted vs not readmitted")
+            sns.heatmap(df_cf, annot=True, cmap='Blues')
+            plt.savefig(f"{output_dir}/Confusion_Matrix.png")
 
             # print("accuracy based on right/total is: ", accuracy)
 
@@ -464,13 +478,13 @@ def main():
             all_batch_chosen_words = pd.concat(batch_chosen_words_dfs)
 
             print("shpae of all_batch_chosen_words: ", all_batch_chosen_words.shape)
-            all_batch_chosen_words.to_csv(f"{output_dir}/batch_all_chosen_words.csv")
+            # all_batch_chosen_words.to_csv(f"{output_dir}/batch_all_chosen_words.csv")
 
         return res, all_chosen_words
 
-    # eval_stats, all_chosen_words = test(textData,G_model,'test', max_accuracy=-1)
-    # # #
-    # print("eval_stats: ", eval_stats)
+    eval_stats, all_chosen_words = test(textData,G_model,'test', max_accuracy=-1)
+    # #
+    print("eval_stats: ", eval_stats)
 
 
 
@@ -644,7 +658,7 @@ def main():
 
         chosen_words_df.to_csv(f"{output_dir}/test_setence_chosen_words.csv")
 
-    sentence2results(G_model,"they had heart pain and drugs. One flew over a cuckoos nest. Bla bla bla. This isn't useful. They are really very healthy. Cheesecake. Lol.")
+    # sentence2results(G_model,"they had heart pain and drugs. One flew over a cuckoos nest. Bla bla bla. This isn't useful. They are really very healthy. Cheesecake. Lol.")
 
 
 if __name__ == "__main__":
@@ -685,7 +699,7 @@ if __name__ == "__main__":
         args['date'] = str(date.today())
 
     if cmdargs.model_dir is None:
-        args['model_dir'] = "./artifacts/LSTM_IB_GAN_be_mimic3_new_embs2021-05-12.pt"
+        args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs2021-05-12.pt"
         args['output_dir'] = args['model_dir'][:-3]
 
     # Create output directory if needed
@@ -695,7 +709,7 @@ if __name__ == "__main__":
 
     full_model = False
 
-    textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge", trainLM=False, test_phase=False,
+    textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge","../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model", trainLM=False, test_phase=False,
                              big_emb=args['big_emb'])
     LM = torch.load(args['rootDir'] + '/LMmimic.pkl', map_location=args['device'])
     main()
