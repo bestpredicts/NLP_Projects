@@ -225,17 +225,21 @@ def main():
 
         batch_chosen_words_dfs =[]
 
+        print("device to be used is: ", args['device'])
+
+        data_len = len(textData.datasets[datasetname])
+        print("data_len is: ", data_len)
+
+
         with torch.no_grad():
-            for (i, batch) in enumerate(textData.getBatches(datasetname)):
+            for (i, batch) in tqdm(enumerate(textData.getBatches(datasetname)), total=data_len/args['batchSize']):
                 pppt=False
-                print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-                print("on batch ", i)
+                # print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                # print("on batch ", i)
                 x = {}
                 x['enc_input'] = autograd.Variable(torch.LongTensor(batch.encoderSeqs)).to(args['device'])
                 x['enc_len'] = torch.LongTensor(batch.encoder_lens).to(args['device'])
                 x['labels'] = autograd.Variable(torch.FloatTensor(batch.label).unsqueeze(1)).to(args['device'])
-
-                print(len(x))
 
                 # print("original x labels: ", x['labels'])
 
@@ -260,6 +264,11 @@ def main():
                 output_labels_history = output_labels_history + output_labels.tolist()
                 output_probs_history  = output_probs_history + output_probs.flatten().tolist()
 
+                output_probs_flat =  output_probs.flatten().cpu().numpy()
+
+                # print(output_probs_flat)
+                # print(output_labels)
+
                 # use below if already runinng on cpy
                 # true_labels = x['labels'].long().flatten().numpy()
 
@@ -279,7 +288,7 @@ def main():
                 # print("sampled words [1] shape is: ", sampled_words[1].shape)
                 # print("batch encoderSeqs[0] is: ", batch.encoderSeqs[0])
 
-                for i, b in tqdm(enumerate(batch.encoder_lens)):
+                for i, b in enumerate(batch.encoder_lens):
                     words_chosen_from_sample = []
                     words_not_chosen_from_sample = []
                     words_from_sample = []
@@ -334,8 +343,11 @@ def main():
                     #         print("wasn't even in there pal")
 
                     # print("chosen words is: ", all_chosen_words)
+
+
                     batch_chosen_words_dfs.append(pd.DataFrame({"raw_sentence": [batch.raw[i]], "chosen_words": [words_chosen_from_sample],
                                                                 "words_not_chosen":[words_not_chosen_from_sample],"predicted_label": output_labels[i], "true_label": true_labels[i],
+                                                                "proba":output_probs_flat[i],
                                                                 "enq_seq_chosen":[batch_chosen_encoder_seqs], "enq_seq_not_chosen":[batch_encoder_seqs]}))
 
                     # print(all_chosen_words)
@@ -478,7 +490,7 @@ def main():
             all_batch_chosen_words = pd.concat(batch_chosen_words_dfs)
 
             print("shpae of all_batch_chosen_words: ", all_batch_chosen_words.shape)
-            # all_batch_chosen_words.to_csv(f"{output_dir}/batch_all_chosen_words.csv")
+            all_batch_chosen_words.to_csv(f"{output_dir}/batch_all_chosen_words.csv")
 
         return res, all_chosen_words
 
