@@ -466,7 +466,9 @@ def main():
 
             # fpr, tpr, df_out = vote_score(df_test, output_probs_history, output_dir)
 
-            # rp80 = vote_pr_curve(df_test, output_probs_history, output_dir)
+            rp80 = vote_pr_curve(df_test, output_probs_history, output_dir)
+
+            pd.DataFrame({'rp80':rp80}).to_csv(f"{output_dir}/rp80.csv")
 
             cf = confusion_matrix(true_labels_history, output_labels_history, normalize='true')
             df_cf = pd.DataFrame(cf, ['not r/a', 'readmitted'], ['not r/a', 'readmitted'])
@@ -494,9 +496,10 @@ def main():
 
         return res, all_chosen_words
 
-    eval_stats, all_chosen_words = test(textData,G_model,'test', max_accuracy=-1)
-    # #
-    print("eval_stats: ", eval_stats)
+    if do_full_eval:
+        eval_stats, all_chosen_words = test(textData,G_model,'test', max_accuracy=-1)
+        # #
+        print("eval_stats: ", eval_stats)
 
 
 
@@ -542,6 +545,7 @@ def main():
 
 
     def get_metrics_one(model, batch):
+        model.eval()
         x = {}
         x['enc_input'] = autograd.Variable(torch.LongTensor(batch.encoderSeqs)).to(args['device'])
         x['enc_len'] = torch.LongTensor(batch.encoder_lens).to(args['device'])
@@ -620,15 +624,21 @@ def main():
 
     def sentence2results(model, sentence):
         print(f"getting chosen words for following sentence \n {sentence}")
-
+        model.eval()
         batch = textData.sentence2batch(sentence)
+
+
         x = {}
         x['enc_input'] = autograd.Variable(torch.LongTensor(batch.encoderSeqs)).to(args['device'])
         x['enc_len'] = torch.LongTensor(batch.encoder_lens).to(args['device'])
-        x['labels'] = autograd.Variable(torch.FloatTensor(batch.label).unsqueeze(1)).to(args['device'])
+        x['labels'] = autograd.Variable(torch.FloatTensor(batch.label)).to(args['device'])
+
+        print(x["labels"])
         output_probs, sampled_words = model.predict(x)
 
         output_labels = np.asarray([1 if i else 0 for i in (output_probs.flatten() >= 0.5)])
+
+        output_probs_flat = output_probs.flatten().cpu().detach().numpy()
 
         all_chosen_words = []
         all_not_chosen_words = []
@@ -655,7 +665,7 @@ def main():
 
 
         chosen_words_df =  pd.DataFrame({"raw_sentence": batch.raw, "chosen_words": [all_chosen_words],
-                      "words_not_chosen": [all_not_chosen_words], "predicted_label": output_labels,
+                      "words_not_chosen": [all_not_chosen_words], "predicted_label": output_labels,"proba":output_probs_flat,
                       "enq_seq_chosen": [chosen_enc_seqs], "enq_seq_not_chosen": [not_chosen_enc_seqs]})
 
         # print(batch_chosen_words_dfs)
@@ -668,9 +678,11 @@ def main():
         # print("chosen words from sample: ", [all_chosen_words])
         # print(len(all_chosen_words ))
 
-        chosen_words_df.to_csv(f"{output_dir}/test_setence_chosen_words.csv")
+        chosen_words_df.to_csv(f"{output_dir}/test_sentence_chosen_words.csv")
 
-    # sentence2results(G_model,"they had heart pain and drugs. One flew over a cuckoos nest. Bla bla bla. This isn't useful. They are really very healthy. Cheesecake. Lol.")
+    if get_sentence_results:
+
+        sentence2results(G_model, sentence)
 
 
 if __name__ == "__main__":
@@ -720,6 +732,14 @@ if __name__ == "__main__":
 
 
     full_model = False
+
+    do_full_eval = True
+
+    get_sentence_results = False
+
+    sentence = "has experienced acute on chronic diastolic heart failure in the setting of volume overload due to his sepsis prescribed warfarin due to high sys blood pressure 160 "
+    # sentence = "High diastolic blood pressure. Wheezy with low blood oxygen levels. Normal resipiratory rate"
+
 
     textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge","../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model", trainLM=False, test_phase=False,
                              big_emb=args['big_emb'])
