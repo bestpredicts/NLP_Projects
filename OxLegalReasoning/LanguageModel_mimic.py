@@ -10,8 +10,10 @@ from torch.nn.parameter import Parameter
 
 import argparse
 import numpy as np
+import pandas as pd
 
 import datetime, time
+from datetime import date
 from Hyperparameters import args
 from queue import PriorityQueue
 import copy, math
@@ -19,6 +21,39 @@ from utils import *
 
 from textdataMimic import TextDataMimic
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--gpu', '-g')
+parser.add_argument('--modelarch', '-m')
+parser.add_argument('--choose', '-c')
+parser.add_argument('--use_big_emb', '-be')
+parser.add_argument('--date', '-d')
+cmdargs = parser.parse_args()
+
+usegpu = True
+
+if cmdargs.gpu is None:
+    usegpu = False
+else:
+    usegpu = True
+    args['device'] = 'cuda:' + str(cmdargs.gpu)
+
+if cmdargs.modelarch is None:
+    args['model_arch'] = 'lstm'
+else:
+    args['model_arch'] = cmdargs.modelarch
+
+if cmdargs.choose is None:
+    args['choose'] = 0
+else:
+    args['choose'] = int(cmdargs.choose)
+
+if cmdargs.use_big_emb:
+    args['big_emb'] = True
+else:
+    args['big_emb'] = False
+
+if cmdargs.date is None:
+    args['date'] = str(date.today())
 
 def asMinutes(s):
     m = math.floor(s / 60)
@@ -160,8 +195,8 @@ class LanguageModel(nn.Module):
         seqlen = decoderInputs.size()[1]
         decoderTargets = decoderInputs[:, 1:]
         decoderInputs = decoderInputs[:, :-1]
-        print("current decoder inputs in LMloss : ", decoderInputs)
-        print("current decoder Targets in LMloss : ", decoderTargets)
+        # print("current decoder inputs in LMloss : ", decoderInputs)
+        # print("current decoder Targets in LMloss : ", decoderTargets)
         decoderTargetsEmbeddings = self.embedding(decoderTargets)
         decoderTargetsEmbeddings = decoderTargetsEmbeddings * sampled_hard[:, 1:].unsqueeze(2)
         packed_input = torch.transpose(decoderInputs, 0, 1)
@@ -220,6 +255,11 @@ def train(textData, model, model_path, print_every=10000, plot_every=10, learnin
 
     args['trainseq2seq'] = False
 
+    epoch_loss_history = []
+    ppl_history = []
+    min_epoch_loss = 100000
+
+
     min_ppl = -1
     # accuracy = self.test('test', max_accu)
     for epoch in range(args['numEpochs']):
@@ -262,14 +302,33 @@ def train(textData, model, model_path, print_every=10000, plot_every=10, learnin
             iter += 1
 
         ppl = test(textData, model, 'test')
-        if ppl < min_ppl or min_ppl == -1:
+        # if ppl < min_ppl or min_ppl == -1:
+        #     print('ppl = ', ppl, '<= min_ppl(', min_ppl, '), saving model...')
+        #     torch.save(model, model_path)
+        #     min_ppl = ppl
+        epoch_loss = sum(losses) / len(losses)
+        if epoch_loss < min_epoch_loss:
+            print(f"current epoch loss: {epoch_loss}")
             print('ppl = ', ppl, '<= min_ppl(', min_ppl, '), saving model...')
             torch.save(model, model_path)
-            min_ppl = ppl
+            min_epoch_loss = epoch_loss
+
+
 
         print('Epoch ', epoch, 'loss = ', sum(losses) / len(losses), 'Valid ppl = ', ppl,
               'min ppl=', min_ppl)
 
+        epoch_loss_history.append(sum(losses) / len(losses))
+        ppl_history.append(ppl)
+
+    training_stats = {}
+    training_stats['epoch'] = list(range(len(epoch_loss_history)))
+    training_stats['epoch_loss'] = epoch_loss_history
+    training_stats['ppl'] = ppl_history
+
+    pd.DataFrame(training_stats).to_csv(
+        args['rootDir'] + "/LM_training_stats_" + args['date'] + ".csv",
+        index=False)
     # self.test()
     # showPlot(plot_losses)
 
@@ -317,7 +376,7 @@ def kenlm_test(textData):
 
 
 if __name__ == '__main__':
-    textData = TextDataMimic("mimic", "../clinicalBERT/data/",  "discharge", trainLM=True, test_phase=False, big_emb = False)
+    textData = TextDataMimic("mimic", "../clinicalBERT/data/",  "discharge","../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model", trainLM=True, test_phase=False, big_emb = False)
     # nll = kenlm_test(textData)
     # print('LM=', nll, np.exp(nll))
 

@@ -421,10 +421,10 @@ class TextDataMimic:
                 pickle.dump(all_data, handle, -1)
 
     def load_all_mimic(self):
-        self.data_dump_path1 = self.basedir + '/mimic3_processed_3days.pkl'
-        self.data_dump_path2 = self.basedir + '/mimic3_processed_discharge.pkl'
+        self.data_dump_path1 = self.basedir + '/mimic3_processed_originalembs_3days.pkl'
+        self.data_dump_path2 = self.basedir + '/mimic3_processed_originalembs_discharge.pkl'
 
-        self.data_dump_all_path = self.basedir + '/mimic3_procssed_all.pkl'
+        self.data_dump_all_path = self.basedir + '/mimic3_processed_originalembs_all.pkl'
 
         datasetExist = os.path.isfile(self.data_dump_all_path)
 

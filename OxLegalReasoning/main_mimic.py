@@ -97,7 +97,7 @@ class Runner:
             args['classify_type'] = 'single'
             args['batchSize'] = 256
 
-        self.textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge", trainLM=False, test_phase=False, big_emb = args['big_emb'])
+        self.textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge", "../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model", trainLM=False, test_phase=False, big_emb = args['big_emb'])
         # self.start_token = self.textData.word2index['START_TOKEN']
         # self.end_token = self.textData.word2index['END_TOKEN']
         args['vocabularySize'] = self.textData.getVocabularySize()
@@ -262,23 +262,23 @@ class Runner:
 
     def CalPPL(self, LM):
 
-        batches = self.textData.getBatches('dev')
+        batches = self.textData.getBatches_forLM('dev')
         total = 0
         loss_sum = 0
         for index, batch in enumerate(batches):
             x = {}
-            print("supposed batch: ", batch.decoderSeqs)
+            # print("supposed batch: ", batch.decoderSeqs)
             x['dec_input'] = autograd.Variable(torch.LongTensor(batch.decoderSeqs)).to(args['device'])
             x['dec_len'] = batch.decoder_lens
             x['dec_target'] = autograd.Variable(torch.LongTensor(batch.targetSeqs)).to(args['device'])
             total += x['dec_input'].size()[0]
-            print(x['dec_input'].size())
-            print(x)
+            # print(x['dec_input'].size())
+            # print(x)
 
-            embedding = nn.Embedding.from_pretrained(torch.FloatTensor(self.textData.index2vector))
-            decoderTargetsEmbeddings = embedding(x['dec_target'])
-            print("decoder target embeddings shape: ", decoderTargetsEmbeddings.shape)
-            _, recon_loss = LM.getloss(x['dec_input'],decoderTargetsEmbeddings, x['dec_target']  )
+            embedding = nn.Embedding.from_pretrained(torch.FloatTensor(self.textData.index2vector)).to(args['device'])
+            decoderTargetsEmbeddings = embedding(x['dec_target']).to(args['device'])
+            # print("decoder target embeddings shape: ", decoderTargetsEmbeddings.shape)
+            _, recon_loss = LM.getloss(x['dec_input'],decoderTargetsEmbeddings, x['dec_target'])
             loss_sum += recon_loss.sum()
 
         loss_mean = loss_sum / total
