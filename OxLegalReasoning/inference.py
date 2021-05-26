@@ -18,38 +18,90 @@ from Decoder import Decoder
 from Hyperparameters import args
 from collections import namedtuple
 import pandas as pd
-# import logging
+
 import os
-# from helper_functions import log_anything
+
 import LSTM_IB_GAN_mimic
-import LSTM_IB_GAN_mimic_ce
 from textdataMimic import TextDataMimic, Batch
 from LanguageModel_mimic import LanguageModel
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-# import logging
-# mpl_logger = logging.getLogger('matplotlib')
-# mpl_logger.setLevel(logging.WARNING)
 
 import seaborn as sns
 from sklearn.metrics import f1_score
 from sklearn.metrics import roc_auc_score, precision_recall_curve, roc_curve, auc, confusion_matrix, classification_report
 
-# a function  to create and save logs in the log files
-
-
-
-# logger = log_anything(path="./artifacts/logs/" , file = "mimic3_testinggg"+ args['model_arch'] + "_log.logs")
-#
-# # show log records in the console
-# console_handler = logging.StreamHandler()
 
 import argparse
 import pandas as pd
 from datetime import date
 
+print("parsing arguments")
+parser = argparse.ArgumentParser()
+parser.add_argument('--model_dir', '-md')
+parser.add_argument('--gpu', '-g')
+parser.add_argument('--modelarch', '-m')
+parser.add_argument('--choose', '-c')
+parser.add_argument('--use_big_emb', '-be')
+parser.add_argument('--date', '-d')
 
+cmdargs = parser.parse_args()
+
+print(f"cmdargs is : {cmdargs}")
+
+usegpu = True
+
+if cmdargs.gpu is None:
+    usegpu = False
+else:
+    usegpu = True
+    args['device'] = 'cuda:' + str(cmdargs.gpu)
+
+if cmdargs.modelarch is None:
+    args['model_arch'] = 'lstmibgan'
+else:
+    args['model_arch'] = cmdargs.modelarch
+
+if cmdargs.choose is None:
+    args['choose'] = 0
+else:
+    args['choose'] = int(cmdargs.choose)
+
+if cmdargs.use_big_emb:
+    args['big_emb'] = True
+else:
+    args['big_emb'] = False
+
+if cmdargs.date is None:
+    args['date'] = str(date.today())
+
+if cmdargs.model_dir is None:
+    # args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs2021-05-12.pt"
+    args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs_LM2021-05-25.pt"
+else:
+    args["model_dir"] = cmdargs.model_dir
+
+args['output_dir'] = args['model_dir'][:-3]
+
+# Create output directory if needed
+if not os.path.exists(args['output_dir']):
+    os.makedirs(args['output_dir'])
+
+full_model = False
+
+do_full_eval = False
+
+get_sentence_results = True
+
+sentence = "has experienced acute on chronic diastolic heart failure in the setting of volume overload due to his sepsis prescribed warfarin due to high sys blood pressure 160 "
+# sentence = "High diastolic blood pressure. Wheezy with low blood oxygen levels. Normal resipiratory rate"
+
+textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge",
+                         "../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model", trainLM=False,
+                         test_phase=False,
+                         big_emb=args['big_emb'])
+LM = torch.load(args['rootDir'] + '/LMmimic.pkl', map_location=args['device'])
 
 
 def main():
@@ -468,7 +520,7 @@ def main():
 
             rp80 = vote_pr_curve(df_test, output_probs_history, output_dir)
 
-            pd.DataFrame({'rp80':rp80}).to_csv(f"{output_dir}/rp80.csv")
+            pd.DataFrame({'rp80':[rp80]}).to_csv(f"{output_dir}/rp80.csv")
 
             cf = confusion_matrix(true_labels_history, output_labels_history, normalize='true')
             df_cf = pd.DataFrame(cf, ['not r/a', 'readmitted'], ['not r/a', 'readmitted'])
@@ -687,61 +739,7 @@ def main():
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--gpu', '-g')
-    parser.add_argument('--modelarch', '-m')
-    parser.add_argument('--choose', '-c')
-    parser.add_argument('--use_big_emb', '-be')
-    parser.add_argument('--date', '-d')
-    parser.add_argument('--model_dir')
-    cmdargs = parser.parse_args()
-
-    usegpu = True
-
-    if cmdargs.gpu is None:
-        usegpu = False
-    else:
-        usegpu = True
-        args['device'] = 'cuda:' + str(cmdargs.gpu)
-
-    if cmdargs.modelarch is None:
-        args['model_arch'] = 'lstmibgan'
-    else:
-        args['model_arch'] = cmdargs.modelarch
-
-    if cmdargs.choose is None:
-        args['choose'] = 0
-    else:
-        args['choose'] = int(cmdargs.choose)
-
-    if cmdargs.use_big_emb:
-        args['big_emb'] = True
-    else:
-        args['big_emb'] = False
-
-    if cmdargs.date is None:
-        args['date'] = str(date.today())
-
-    if cmdargs.model_dir is None:
-        args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs2021-05-12.pt"
-        args['output_dir'] = args['model_dir'][:-3]
-
-    # Create output directory if needed
-    if not os.path.exists(args['output_dir']):
-        os.makedirs(args['output_dir'])
 
 
-    full_model = False
 
-    do_full_eval = True
-
-    get_sentence_results = False
-
-    sentence = "has experienced acute on chronic diastolic heart failure in the setting of volume overload due to his sepsis prescribed warfarin due to high sys blood pressure 160 "
-    # sentence = "High diastolic blood pressure. Wheezy with low blood oxygen levels. Normal resipiratory rate"
-
-
-    textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge","../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model", trainLM=False, test_phase=False,
-                             big_emb=args['big_emb'])
-    LM = torch.load(args['rootDir'] + '/LMmimic.pkl', map_location=args['device'])
     main()

@@ -37,7 +37,7 @@ class TextDataMimic:
     Warning: No vocabulary limit
     """
 
-    def __init__(self, corpusname, datadir, taskname,embedding_file, trainLM=False, test_phase=True, big_emb=False):
+    def __init__(self, corpusname, datadir, taskname,embedding_file, trainLM=False, test_phase=True, big_emb=False, new_emb = True):
 
         """Load all conversations
         Args:
@@ -68,6 +68,7 @@ class TextDataMimic:
         self.big_embfile = "../clinicalBERT/word2vec+fastText/BioWordVec_PubMed_MIMICIII_d200.vec.bin"
 
         self.big_emb = big_emb
+        self.new_emb = new_emb
         if test_phase:
             self.test_phase = True
         else:
@@ -101,6 +102,8 @@ class TextDataMimic:
 
         if self.big_emb:
             self.data_dump_path = f"{self.basedir}/mimic3_processed_bigembed_{self.taskname}.pkl"
+        elif self.new_emb:
+            self.data_dump_path = f"{self.basedir}/mimic3_processed_new200_{self.taskname}.pkl"
         else:
             self.data_dump_path = f"{self.basedir}/mimic3_processed_originalembs_{self.taskname}.pkl"
 
@@ -117,8 +120,13 @@ class TextDataMimic:
                 print("using big boy embeddings!")
                 self.org_index2word, self.org_index2vec, self.org_word2vec, self.org_key2index = self.get_word2vec_from_pretrained(
                     self.big_embfile)
+            if self.new_emb:
+                print("using new 200d embeddings from: ", self.embfile)
+                self.org_index2word, self.org_index2vec, self.org_word2vec, self.org_key2index = self.get_word2vec_from_pretrained(
+                    self.embfile)
+
             else:
-                print("using small embeddings!")
+                print("using original embeddings! from: ", self.embfile)
                 self.org_index2word, self.org_index2vec, self.org_word2vec, self.org_key2index = self.get_word2vec_from_pretrained(
                     self.embfile)
 
@@ -321,14 +329,14 @@ class TextDataMimic:
             print(len(word2index), cnt)
             print('Dictionary Got!')
             return word2index, index2word, index2vector
-        else:
-            print("re-arranging the smaller embeddings")
+        elif self.new_emb:
+            print("re-arranging the newer embeddings")
             # for the smaller embeddings file - it did not seem to know fullstops - so we explicitly add it here
             word2index['PAD'] = 0
             word2index['START_TOKEN'] = 1
             word2index['END_TOKEN'] = 2
             word2index['UNK'] = 3
-            # word2index['.'] = 4
+            #             word2index['.'] = 4
             # word2index['PAD'] = 1
             # word2index['UNK'] = 0
 
@@ -343,6 +351,34 @@ class TextDataMimic:
             vectordim = len(word2vec[word])
             print('before add special token:', len(index2vector))
             index2vector = [np.random.normal(size=[vectordim]).astype('float32') for _ in range(4)] + index2vector
+            print('after add special token:', len(index2vector))
+            index2vector = np.asarray(index2vector)
+            index2word = [w for w, n in word2index.items()]
+            print(len(word2index), cnt)
+            print('Dictionary Got!')
+            return word2index, index2word, index2vector
+        else:
+            print("re-arranging the smaller embeddings")
+            # for the smaller embeddings file - it did not seem to know fullstops - so we explicitly add it here
+            word2index['PAD'] = 0
+            word2index['START_TOKEN'] = 1
+            word2index['END_TOKEN'] = 2
+            word2index['UNK'] = 3
+            word2index['.'] = 4
+            # word2index['PAD'] = 1
+            # word2index['UNK'] = 0
+
+            cnt = 5
+            index2vector = []
+            for word in word2vec:
+                index2vector.append(word2vec[word])
+
+                word2index[word] = cnt
+                #             print(word, cnt)
+                cnt += 1
+            vectordim = len(word2vec[word])
+            print('before add special token:', len(index2vector))
+            index2vector = [np.random.normal(size=[vectordim]).astype('float32') for _ in range(5)] + index2vector
             print('after add special token:', len(index2vector))
             index2vector = np.asarray(index2vector)
             index2word = [w for w, n in word2index.items()]
@@ -421,10 +457,16 @@ class TextDataMimic:
                 pickle.dump(all_data, handle, -1)
 
     def load_all_mimic(self):
-        self.data_dump_path1 = self.basedir + '/mimic3_processed_originalembs_3days.pkl'
-        self.data_dump_path2 = self.basedir + '/mimic3_processed_originalembs_discharge.pkl'
+        if self.new_emb:
+            self.data_dump_path1 = self.basedir + '/mimic3_processed_new200_3days.pkl'
+            self.data_dump_path2 = self.basedir + '/mimic3_processed_new200_discharge.pkl'
+            self.data_dump_all_path = self.basedir + '/mimic3_processed_new200_all.pkl'
 
-        self.data_dump_all_path = self.basedir + '/mimic3_processed_originalembs_all.pkl'
+        else:
+            self.data_dump_path1 = self.basedir + '/mimic3_processed_originalembs_3days.pkl'
+            self.data_dump_path2 = self.basedir + '/mimic3_processed_originalembs_discharge.pkl'
+
+            self.data_dump_all_path = self.basedir + '/mimic3_processed_originalembs_all.pkl'
 
         datasetExist = os.path.isfile(self.data_dump_all_path)
 

@@ -86,8 +86,9 @@ class LanguageModel(nn.Module):
 
         self.dtype = 'float32'
 
+        #TODO set requires grad to true
         self.embedding = nn.Embedding.from_pretrained(torch.FloatTensor(i2v))
-        self.embedding.weight.requires_grad = False
+        self.embedding.weight.requires_grad = True
 
         if args['decunit'] == 'lstm':
             self.dec_unit = nn.LSTM(input_size=args['embeddingSize'],
@@ -376,7 +377,7 @@ def kenlm_test(textData):
 
 
 if __name__ == '__main__':
-    textData = TextDataMimic("mimic", "../clinicalBERT/data/",  "discharge","../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model", trainLM=True, test_phase=False, big_emb = False)
+    textData = TextDataMimic("mimic", "../clinicalBERT/data/",  "discharge","./data/mimic3/new_mimic_word2vec_200.model", trainLM=True, test_phase=False, big_emb = False, new_emb=True)
     # nll = kenlm_test(textData)
     # print('LM=', nll, np.exp(nll))
 
@@ -390,7 +391,7 @@ if __name__ == '__main__':
     args['embeddingSize'] = textData.index2vector.shape[1]
 
     model = LanguageModel(textData.word2index, textData.index2word, textData.index2vector).to(args['device'])
-    train(textData, model, model_path = args['rootDir']+'/LMmimic.pkl')
+    train(textData, model, model_path = args['rootDir']+'/LMmimic_newembs200.pkl')
     print("using device: ", args['device'])
     # LM = torch.load(args['rootDir'] + '/LMbeer3.pkl', map_location=args['device'])
     # print('LM=', test(textData, LM, 'test'))
