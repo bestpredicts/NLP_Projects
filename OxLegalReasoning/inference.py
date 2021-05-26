@@ -21,7 +21,7 @@ import pandas as pd
 
 import os
 
-import LSTM_IB_GAN_mimic
+from LSTM_IB_GAN_mimic import LSTM_IB_GAN_Model, Discriminator
 from textdataMimic import TextDataMimic, Batch
 from LanguageModel_mimic import LanguageModel
 from tqdm import tqdm
@@ -37,7 +37,7 @@ import argparse
 import pandas as pd
 from datetime import date
 
-print("parsing arguments")
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_dir', '-md')
 parser.add_argument('--gpu', '-g')
@@ -48,7 +48,6 @@ parser.add_argument('--date', '-d')
 
 cmdargs = parser.parse_args()
 
-print(f"cmdargs is : {cmdargs}")
 
 usegpu = True
 
@@ -80,7 +79,7 @@ if cmdargs.model_dir is None:
     # args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs2021-05-12.pt"
     args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs_LM2021-05-25.pt"
 else:
-    args["model_dir"] = cmdargs.model_dir
+    args["model_dir"] = str(cmdargs.model_dir)
 
 args['output_dir'] = args['model_dir'][:-3]
 
@@ -100,7 +99,7 @@ sentence = "has experienced acute on chronic diastolic heart failure in the sett
 textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge",
                          "../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model", trainLM=False,
                          test_phase=False,
-                         big_emb=args['big_emb'])
+                         big_emb=args['big_emb'], new_emb = True)
 LM = torch.load(args['rootDir'] + '/LMmimic.pkl', map_location=args['device'])
 
 
@@ -139,8 +138,8 @@ def main():
         print("loading model from state dicts")
 
         checkpoint = torch.load(args['model_dir'])
-        G_model = LSTM_IB_GAN_mimic.LSTM_IB_GAN_Model(textData.word2index, textData.index2word, LM, textData.index2vector).to(args['device'])
-        D_model = LSTM_IB_GAN_mimic.Discriminator().to(args['device'])
+        G_model = LSTM_IB_GAN_Model(textData.word2index, textData.index2word, LM, textData.index2vector).to(args['device'])
+        D_model = Discriminator().to(args['device'])
         G_optimizer = optim.Adam(G_model.parameters(), lr=0.0004, weight_decay=2e-6)
         D_optimizer = optim.Adam(D_model.parameters(), lr=0.0004, weight_decay=2e-6)
         #
@@ -258,6 +257,7 @@ def main():
         MSEloss = 0
         total_prec = 0.0
         samplerate = 0.0
+
         model.eval()
         nb_eval_steps = 0
         eval_acc_total = 0
@@ -738,8 +738,4 @@ def main():
 
 
 if __name__ == "__main__":
-
-
-
-
     main()

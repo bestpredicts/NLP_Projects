@@ -27,6 +27,7 @@ parser.add_argument('--modelarch', '-m')
 parser.add_argument('--choose', '-c')
 parser.add_argument('--use_big_emb', '-be')
 parser.add_argument('--date', '-d')
+parser.add_argument('--model_dir', '-md')
 cmdargs = parser.parse_args()
 
 usegpu = True
@@ -54,6 +55,12 @@ else:
 
 if cmdargs.date is None:
     args['date'] = str(date.today())
+
+if cmdargs.model_dir is None:
+    # args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs2021-05-12.pt"
+    args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs_LM2021-05-25.pt"
+else:
+    args["model_dir"] = str(cmdargs.model_dir)
 
 def asMinutes(s):
     m = math.floor(s / 60)

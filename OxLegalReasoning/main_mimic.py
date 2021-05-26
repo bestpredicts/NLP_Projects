@@ -1,5 +1,5 @@
 # Copyright 2020 . All Rights Reserved.
-# Author : Lei Sha
+# Author : Lei Sha adapted by Niall Taylor
 
 from Hyperparameters import args
 import argparse
