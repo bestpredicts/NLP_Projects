@@ -26,6 +26,7 @@ parser.add_argument('--gpu', '-g')
 parser.add_argument('--modelarch', '-m')
 parser.add_argument('--choose', '-c')
 parser.add_argument('--use_big_emb', '-be')
+parser.add_argument('--use_new_emb', '-ne')
 parser.add_argument('--date', '-d')
 parser.add_argument('--model_dir', '-md')
 cmdargs = parser.parse_args()
@@ -52,6 +53,11 @@ if cmdargs.use_big_emb:
     args['big_emb'] = True
 else:
     args['big_emb'] = False
+
+if cmdargs.use_new_emb:
+    args['new_emb'] = True
+else:
+    args['new_emb'] = False
 
 if cmdargs.date is None:
     args['date'] = str(date.today())
@@ -326,7 +332,7 @@ def train(textData, model, model_path, print_every=10000, plot_every=10, learnin
         print('Epoch ', epoch, 'loss = ', sum(losses) / len(losses), 'Valid ppl = ', ppl,
               'min ppl=', min_ppl)
 
-        epoch_loss_history.append(sum(losses) / len(losses))
+        epoch_loss_history.append(sum(losses) / len(losses).item())
         ppl_history.append(ppl)
 
     training_stats = {}
@@ -398,7 +404,6 @@ if __name__ == '__main__':
     args['embeddingSize'] = textData.index2vector.shape[1]
 
     model = LanguageModel(textData.word2index, textData.index2word, textData.index2vector).to(args['device'])
-    train(textData, model, model_path = args['rootDir']+'/LMmimic_newembs200.pkl')
+    train(textData, model, model_path = args['rootDir']+'/LMmimic.pkl')
     print("using device: ", args['device'])
-    # LM = torch.load(args['rootDir'] + '/LMbeer3.pkl', map_location=args['device'])
-    # print('LM=', test(textData, LM, 'test'))
+

@@ -5,12 +5,14 @@ from Hyperparameters import args
 import argparse
 from datetime import date
 
+print("about to parse arguments in main_mimic")
 parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', '-g')
 parser.add_argument('--modelarch', '-m')
 parser.add_argument('--aspect', '-a')
 parser.add_argument('--choose', '-c')
 parser.add_argument('--use_big_emb', '-be')
+parser.add_argument('--use_new_emb', '-ne')
 parser.add_argument('--date', '-d')
 cmdargs = parser.parse_args()
 print(cmdargs)
@@ -40,6 +42,12 @@ if cmdargs.use_big_emb:
     args['big_emb'] = True
 else:
     args['big_emb'] = False
+
+if cmdargs.use_new_emb:
+    args['new_emb'] = True
+else:
+    args['new_emb'] = False
+
 if cmdargs.date is None:
     args['date'] = str(date.today())
 
@@ -70,7 +78,7 @@ import copy
 from LanguageModel_mimic import LanguageModel
 
 import LSTM_IB_GAN_mimic
-import LSTM_IB_GAN_mimic_ce
+# import LSTM_IB_GAN_mimic_ce
 
 
 def asMinutes(s):
@@ -97,7 +105,7 @@ class Runner:
             args['classify_type'] = 'single'
             args['batchSize'] = 256
 
-        self.textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge", "./data/mimic3/new_mimic_word2vec_200.model", trainLM=False, test_phase=False, big_emb = args['big_emb'], new_emb = True)
+        self.textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge", "./data/mimic3/new_mimic_word2vec_200.model", trainLM=False, test_phase=False, big_emb = args['big_emb'], new_emb = args['new_emb'])
         # self.start_token = self.textData.word2index['START_TOKEN']
         # self.end_token = self.textData.word2index['END_TOKEN']
         args['vocabularySize'] = self.textData.getVocabularySize()
@@ -111,7 +119,13 @@ class Runner:
         print(args)
         if args['model_arch'] == 'lstmibgan':
             print('Using LSTM information bottleneck GAN model for mimic.')
-            LM = torch.load(args['rootDir']+'/LMmimic.pkl', map_location=args['device'])
+
+            if args["new_emb"]:
+                print("using language model with new 200d embeddings")
+                LM = torch.load(args['rootDir']+'/LMmimic_newembs200.pkl', map_location=args['device'])
+            else:
+                print("using older 100d word embeddings")
+                LM = torch.load(args['rootDir']+'/LMmimic.pkl', map_location=args['device'])
             for param in LM.parameters():
                 param.requires_grad = False
 

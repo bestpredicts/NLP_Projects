@@ -44,6 +44,7 @@ parser.add_argument('--gpu', '-g')
 parser.add_argument('--modelarch', '-m')
 parser.add_argument('--choose', '-c')
 parser.add_argument('--use_big_emb', '-be')
+parser.add_argument('--use_new_emb', '-ne')
 parser.add_argument('--date', '-d')
 
 cmdargs = parser.parse_args()
@@ -72,6 +73,11 @@ if cmdargs.use_big_emb:
 else:
     args['big_emb'] = False
 
+if cmdargs.use_new_emb:
+    args['new_emb'] = True
+else:
+    args['new_emb'] = False
+
 if cmdargs.date is None:
     args['date'] = str(date.today())
 
@@ -79,7 +85,7 @@ if cmdargs.model_dir is None:
     # args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs2021-05-12.pt"
     args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs_LM2021-05-25.pt"
 else:
-    args["model_dir"] = str(cmdargs.model_dir)
+    args["model_dir"] = "./artifacts/" + str(cmdargs.model_dir)
 
 args['output_dir'] = args['model_dir'][:-3]
 
@@ -89,7 +95,7 @@ if not os.path.exists(args['output_dir']):
 
 full_model = False
 
-do_full_eval = False
+do_full_eval = True
 
 get_sentence_results = True
 
@@ -97,10 +103,18 @@ sentence = "has experienced acute on chronic diastolic heart failure in the sett
 # sentence = "High diastolic blood pressure. Wheezy with low blood oxygen levels. Normal resipiratory rate"
 
 textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge",
-                         "../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model", trainLM=False,
+                         "./data/mimic3/new_mimic_word2vec_200.model", trainLM=False,
                          test_phase=False,
-                         big_emb=args['big_emb'], new_emb = True)
-LM = torch.load(args['rootDir'] + '/LMmimic.pkl', map_location=args['device'])
+                         big_emb=args['big_emb'], new_emb = args["new_emb"])
+
+if args["new_emb"]:
+    print("using language model with new 200d embeddings")
+    LM = torch.load(args['rootDir'] + '/LMmimic_newembs200.pkl', map_location=args['device'])
+else:
+    print("using older 100d word embeddings")
+    LM = torch.load(args['rootDir'] + '/LMmimic.pkl', map_location=args['device'])
+for param in LM.parameters():
+    param.requires_grad = False
 
 
 def main():
@@ -516,7 +530,7 @@ def main():
             # print(true_labels_history)
 
 
-            # fpr, tpr, df_out = vote_score(df_test, output_probs_history, output_dir)
+            fpr, tpr, df_out = vote_score(df_test, output_probs_history, output_dir)
 
             rp80 = vote_pr_curve(df_test, output_probs_history, output_dir)
 
