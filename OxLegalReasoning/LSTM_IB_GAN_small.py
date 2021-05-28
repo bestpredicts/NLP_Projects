@@ -14,7 +14,65 @@ import time, math
 from Encoder import Encoder
 from Decoder import Decoder
 from Hyperparameters import args
+import argparse
+import pandas as pd
+from datetime import date
 
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--gpu', '-g')
+parser.add_argument('--modelarch', '-m')
+parser.add_argument('--choose', '-c')
+parser.add_argument('--use_big_emb', '-be')
+parser.add_argument('--use_new_emb', '-ne')
+parser.add_argument('--date', '-d')
+parser.add_argument('--model_dir', '-md')
+parser.add_argument('--encarch', '-ea')
+cmdargs = parser.parse_args()
+
+usegpu = True
+
+if cmdargs.gpu is None:
+    usegpu = False
+else:
+    usegpu = True
+    args['device'] = 'cuda:' + str(cmdargs.gpu)
+
+if cmdargs.modelarch is None:
+    args['model_arch'] = 'lstm'
+else:
+    args['model_arch'] = cmdargs.modelarch
+
+if cmdargs.choose is None:
+    args['choose'] = 0
+else:
+    args['choose'] = int(cmdargs.choose)
+
+if cmdargs.use_big_emb:
+    args['big_emb'] = True
+else:
+    args['big_emb'] = False
+
+if cmdargs.use_new_emb:
+    args['new_emb'] = True
+    emb_file_path = "newemb200"
+else:
+    args['new_emb'] = False
+    emb_file_path =  "orgembs"
+
+if cmdargs.date is None:
+    args['date'] = str(date.today())
+
+if cmdargs.model_dir is None:
+    # args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs2021-05-12.pt"
+    args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs_LM2021-05-25.pt"
+else:
+    args["model_dir"] = str(cmdargs.model_dir)
+
+if cmdargs.encarch is None:
+    args['enc_arch'] = 'rcnn'
+else:
+    args['enc_arch'] = cmdargs.encarch
 
 def asMinutes(s):
     m = math.floor(s / 60)
@@ -220,7 +278,7 @@ class LSTM_IB_GAN_Model(nn.Module):
         return output, (torch.argmax(output, dim=-1), sampled_words, wordsamplerate)
 
 
-def train(textData, LM, model_path=args['rootDir'] + '/chargemodel_LSTM_IB_GAN_small.mdl', print_every=500, plot_every=10,
+def train(textData, LM, model_path=args['rootDir'] + '/LSTM_IB_GAN_'+ emb_file_path+'_small.mdl', print_every=500, plot_every=10,
           learning_rate=0.001, n_critic=5, eps = 1e-6):
     print('Using small arch...')
     start = time.time()

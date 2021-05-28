@@ -18,12 +18,20 @@ import argparse
 import pandas as pd
 from datetime import date
 
+import argparse
+import pandas as pd
+from datetime import date
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', '-g')
 parser.add_argument('--modelarch', '-m')
 parser.add_argument('--choose', '-c')
 parser.add_argument('--use_big_emb', '-be')
+parser.add_argument('--use_new_emb', '-ne')
 parser.add_argument('--date', '-d')
+parser.add_argument('--model_dir', '-md')
+parser.add_argument('--encarch', '-ea')
 cmdargs = parser.parse_args()
 
 usegpu = True
@@ -39,7 +47,6 @@ if cmdargs.modelarch is None:
 else:
     args['model_arch'] = cmdargs.modelarch
 
-
 if cmdargs.choose is None:
     args['choose'] = 0
 else:
@@ -50,8 +57,26 @@ if cmdargs.use_big_emb:
 else:
     args['big_emb'] = False
 
+if cmdargs.use_new_emb:
+    args['new_emb'] = True
+    emb_file_path = "newemb200"
+else:
+    args['new_emb'] = False
+    emb_file_path =  "orgembs"
+
 if cmdargs.date is None:
     args['date'] = str(date.today())
+
+if cmdargs.model_dir is None:
+    # args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs2021-05-12.pt"
+    args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs_LM2021-05-25.pt"
+else:
+    args["model_dir"] = str(cmdargs.model_dir)
+
+if cmdargs.encarch is None:
+    args['enc_arch'] = 'rcnn'
+else:
+    args['enc_arch'] = cmdargs.encarch
 
 
 def asMinutes(s):
@@ -117,8 +142,10 @@ class LSTM_IB_GAN_Model(nn.Module):
 
         #TODO this uses this embedding - but need to retrain the language model really or just use the pretrained embeddings?
         # self.embedding = LM.embedding
-        print("using pretrained embeddings yo")
-        self.embedding = nn.Embedding.from_pretrained(torch.FloatTensor(i2v))
+        # print("using pretrained embeddings yo")
+        self.embedding = LM.embedding
+        # self.embedding = nn.Embedding.from_pretrained(torch.FloatTensor(i2v))
+        self.embedding.weight.requires_grad = True
 
         self.encoder_all = Encoder(w2i, i2w, self.embedding, bidirectional = True).to(args['device'])
         self.encoder_select = Encoder(w2i, i2w, self.embedding, bidirectional = True).to(args['device'])
@@ -222,9 +249,9 @@ class LSTM_IB_GAN_Model(nn.Module):
 
         en_outputs_masked, en_state = self.encoder_mask(self.encoderInputs, self.encoder_lengths,
                                                         sampled_seq[:, :, 1])  # batch seq hid
-        print("about to apply z_to_fea to the following: ", en_outputs_masked)
+        # print("about to apply z_to_fea to the following: ", en_outputs_masked)
         s_w_feature = self.z_to_fea(en_outputs_masked)
-        print("swf aka z_to_fea is: ", s_w_feature)
+        # print("swf aka z_to_fea is: ", s_w_feature)
         z_nero_sampled, _ = torch.max(s_w_feature, dim=1)  # batch hid
 
         z_prob = self.softmax(z_logit)
@@ -240,9 +267,11 @@ class LSTM_IB_GAN_Model(nn.Module):
         # en_hidden, en_cell = en_state   #2 batch hid
 
         #TODO below omega works
-        omega = torch.mean(torch.sum(torch.abs(sampled_seq[:,:-1,1] - sampled_seq[:,1:,1]), dim = 1))
+        # omega = torch.mean(torch.sum(torch.abs(sampled_seq[:,:-1,1] - sampled_seq[:,1:,1]), dim = 1))
         #TODO below omega calc does not work
         # omega = self.LM.LMloss(sampled_seq_soft[:,:,1],sampled_seq[:, :, 1], self.encoderInputs)
+        # below is from the other ibgan model - based on beer data
+        omega = self.LM.LMloss(sampled_seq[:, :, 1], self.encoderInputs)
 
         # print("omega is: ", omega)
         # print(I_x_z.size(), omega.size())
@@ -266,7 +295,7 @@ class LSTM_IB_GAN_Model(nn.Module):
 
 
     def forward(self, x):
-        print("about to try forward method!")
+
         losses,losses_best,I, om, z_nero_best, z_nero_sampled, _, _,_,logpz,optional = self.build(x)
         return losses,losses_best,I, om, z_nero_best, z_nero_sampled, logpz, optional
 
@@ -275,7 +304,7 @@ class LSTM_IB_GAN_Model(nn.Module):
         return output, (torch.argmax(output, dim=-1), sampled_words, wordsamplerate)
 
 
-def train(textData, LM, model_path=args['rootDir'] + '/TESTINGGG_LSTM_IB_GAN_small'+ args['date']+'.mdl', print_every=500, plot_every=10,
+def train(textData, LM, model_path=args['rootDir'] + '/' + args['enc_arch'] + 'SMALL_IB_GAN_be_mimic3_' + emb_file_path+ '_LM' + args['date'] + '.pt', print_every=500, plot_every=10,
           learning_rate=0.001, n_critic=5, eps = 1e-6):
     print('Using small arch...')
     start = time.time()
@@ -439,7 +468,7 @@ def train(textData, LM, model_path=args['rootDir'] + '/TESTINGGG_LSTM_IB_GAN_sma
 
     # print(training_stats)
     #save training stats to file
-    pd.DataFrame(training_stats).to_csv(args['rootDir']+"/TESTINGGG_training_stats"+args['model_arch']+ args['date']+".csv", index=False)
+    pd.DataFrame(training_stats).to_csv(args['rootDir'] + '/' + args['enc_arch'] + "SMALL_training_stats_be_"+ emb_file_path+"_LM_" + args['model_arch'] + args['date'] + ".csv", index=False)
 
     # self.test()
     # showPlot(plot_losses)
@@ -474,8 +503,8 @@ def test(textData, model, datasetname, max_accuracy, eps = 1e-6):
             # print("output labels shape: ", output_labels.shape)
             # print("output labels: ", output_labels)
             # print("===========================================")
-            print("sampled words shape: ", sampled_words.shape)
-            print("sampled words: ", sampled_words)
+            # print("sampled words shape: ", sampled_words.shape)
+            # print("sampled words: ", sampled_words)
 
 
             if not pppt:
@@ -538,16 +567,12 @@ def test(textData, model, datasetname, max_accuracy, eps = 1e-6):
 
     print("finished testing! ")
 
-    accuracy = res['accuracy']
-    if accuracy > max_accuracy:
-        with open(args['rootDir'] + '/error_case_' + args['model_arch'] + args['date'] + '.txt', 'w') as wh:
-            for d in dset:
-                wh.write(''.join([textData.index2word[wid] for wid in d[0]]))
-                wh.write('\t')
-                wh.write(textData.lawinfo['i2c'][int(d[1])])
-                wh.write('\t')
-                wh.write(textData.lawinfo['i2c'][int(d[2])])
-                wh.write('\n')
-        wh.close()
+    # accuracy = res['accuracy']
+    # if accuracy > max_accuracy:
+    #     with open(args['rootDir'] + '/error_case_' + args['model_arch'] + args['date'] + '.txt', 'w') as wh:
+    #         for d in dset:
+    #             wh.write(''.join([textData.index2word[wid] for wid in d[0]]))
+    #             wh.write('\t')
+    #     wh.close()
 
     return res

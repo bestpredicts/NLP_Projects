@@ -46,8 +46,10 @@ else:
 
 if cmdargs.use_new_emb:
     args['new_emb'] = True
+    emb_file_path = "newemb200"
 else:
     args['new_emb'] = False
+    emb_file_path =  "orgembs"
 
 if cmdargs.date is None:
     args['date'] = str(date.today())
@@ -112,7 +114,7 @@ class Runner:
             args['classify_type'] = 'single'
             args['batchSize'] = 256
 
-        self.textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge", "./data/mimic3/new_mimic_word2vec_200.model", trainLM=False, test_phase=False, big_emb = args['big_emb'], new_emb = args['new_emb'])
+        self.textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge", trainLM=False, test_phase=False, big_emb = args['big_emb'], new_emb = args['new_emb'])
         # self.start_token = self.textData.word2index['START_TOKEN']
         # self.end_token = self.textData.word2index['END_TOKEN']
         args['vocabularySize'] = self.textData.getVocabularySize()

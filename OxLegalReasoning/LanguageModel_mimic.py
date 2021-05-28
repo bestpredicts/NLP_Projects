@@ -32,6 +32,7 @@ parser.add_argument('--model_dir', '-md')
 parser.add_argument('--encarch', '-ea')
 cmdargs = parser.parse_args()
 
+print("cmd args at moment: ", cmdargs)
 usegpu = True
 
 if cmdargs.gpu is None:
@@ -57,8 +58,10 @@ else:
 
 if cmdargs.use_new_emb:
     args['new_emb'] = True
+    emb_file_path = "newemb200"
 else:
     args['new_emb'] = False
+    emb_file_path =  "orgembs"
 
 if cmdargs.date is None:
     args['date'] = str(date.today())
@@ -74,6 +77,8 @@ if cmdargs.encarch is None:
     args['enc_arch'] = 'rcnn'
 else:
     args['enc_arch'] = cmdargs.encarch
+
+print(args)
 
 def asMinutes(s):
     m = math.floor(s / 60)
@@ -339,7 +344,7 @@ def train(textData, model, model_path, print_every=10000, plot_every=10, learnin
         print('Epoch ', epoch, 'loss = ', sum(losses) / len(losses), 'Valid ppl = ', ppl,
               'min ppl=', min_ppl)
 
-        epoch_loss_history.append(sum(losses) / len(losses).item())
+        epoch_loss_history.append((sum(losses) / len(losses)).item())
         ppl_history.append(ppl)
 
     training_stats = {}
@@ -397,7 +402,7 @@ def kenlm_test(textData):
 
 
 if __name__ == '__main__':
-    textData = TextDataMimic("mimic", "../clinicalBERT/data/",  "discharge","./data/mimic3/new_mimic_word2vec_200.model", trainLM=True, test_phase=False, big_emb = False, new_emb=True)
+    textData = TextDataMimic("mimic", "../clinicalBERT/data/",  "discharge", trainLM=True, test_phase=False, big_emb = False, new_emb=False)
     # nll = kenlm_test(textData)
     # print('LM=', nll, np.exp(nll))
 

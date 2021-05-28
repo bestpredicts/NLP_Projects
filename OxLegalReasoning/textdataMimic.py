@@ -37,7 +37,7 @@ class TextDataMimic:
     Warning: No vocabulary limit
     """
 
-    def __init__(self, corpusname, datadir, taskname,embedding_file, trainLM=False, test_phase=True, big_emb=False, new_emb = True):
+    def __init__(self, corpusname, datadir, taskname, trainLM=False, test_phase=True, big_emb=False, new_emb = False):
 
         """Load all conversations
         Args:
@@ -61,14 +61,23 @@ class TextDataMimic:
         # self.big_embfile = "../clinicalBERT/word2vec+fastText/word2vec+fastText/BioWordVec_PubMed_MIMICIII_d200.vec.bin"
         #use if on vm
         # self.embfile = "../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model"
+        self.big_emb = big_emb
+        self.new_emb = new_emb
+        print("self.new emb in textData is: ", self.new_emb)
+        print("self.big emb in textData is: ", self.big_emb)
+        if self.new_emb:
+            print("using new embeddings")
+            self.embfile = "./data/mimic3/new_mimic_word2vec_200.model"
 
-        self.embfile = embedding_file
+        else:
+            print("using original embeddings")
+            self.embfile = "../clinicalBERT/word2vec+fastText/word2vec+fastText/word2vec.model"
+        # self.embfile = embedding_file
         print(f"using this embedding model:{self.embfile} ")
         # self.embfile = "./data/mimic3/new_mimic_word2vec.model"
         self.big_embfile = "../clinicalBERT/word2vec+fastText/BioWordVec_PubMed_MIMICIII_d200.vec.bin"
 
-        self.big_emb = big_emb
-        self.new_emb = new_emb
+
         if test_phase:
             self.test_phase = True
         else:

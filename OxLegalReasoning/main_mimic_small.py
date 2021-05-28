@@ -47,14 +47,16 @@ parser.add_argument('--gpu', '-g')
 parser.add_argument('--modelarch', '-m')
 parser.add_argument('--choose', '-c')
 parser.add_argument('--use_big_emb', '-be')
+parser.add_argument('--use_new_emb', '-ne')
 parser.add_argument('--date', '-d')
+parser.add_argument('--model_dir', '-md')
+parser.add_argument('--encarch', '-ea')
 cmdargs = parser.parse_args()
 
 usegpu = True
 
 if cmdargs.gpu is None:
     usegpu = False
-    args['device'] = 'cpu'
 else:
     usegpu = True
     args['device'] = 'cuda:' + str(cmdargs.gpu)
@@ -63,7 +65,6 @@ if cmdargs.modelarch is None:
     args['model_arch'] = 'lstm'
 else:
     args['model_arch'] = cmdargs.modelarch
-
 
 if cmdargs.choose is None:
     args['choose'] = 0
@@ -75,8 +76,26 @@ if cmdargs.use_big_emb:
 else:
     args['big_emb'] = False
 
+if cmdargs.use_new_emb:
+    args['new_emb'] = True
+    emb_file_path = "newemb200"
+else:
+    args['new_emb'] = False
+    emb_file_path =  "orgembs"
+
 if cmdargs.date is None:
     args['date'] = str(date.today())
+
+if cmdargs.model_dir is None:
+    # args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs2021-05-12.pt"
+    args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs_LM2021-05-25.pt"
+else:
+    args["model_dir"] = str(cmdargs.model_dir)
+
+if cmdargs.encarch is None:
+    args['enc_arch'] = 'rcnn'
+else:
+    args['enc_arch'] = cmdargs.encarch
 
 def asMinutes(s):
     m = math.floor(s / 60)
@@ -94,7 +113,7 @@ def timeSince(since, percent):
 
 class Runner:
     def __init__(self):
-        self.model_path = args['rootDir'] + '/mimic_model_' + args['model_arch'] + args['date'] + '.mdl'
+        self.model_path = model_path=args['rootDir'] + '/LSTM_IB_GAN_mimic_'+ emb_file_path+'_small'+args['date']+'.mdl'
 
     def main(self):
 
@@ -113,7 +132,7 @@ class Runner:
             args['batchSize'] = 64
             args['task'] = 'toi'
 
-        self.textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge", trainLM=False, test_phase=True, big_emb=False)
+        self.textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge", trainLM=False, test_phase=False, big_emb = args['big_emb'], new_emb = args['new_emb'])
         self.start_token = self.textData.word2index['START_TOKEN']
         self.end_token = self.textData.word2index['END_TOKEN']
         args['vocabularySize'] = self.textData.getVocabularySize()
@@ -147,7 +166,7 @@ class Runner:
             print('Using LSTM information bottleneck GAN model. Mimic ')
             LM = torch.load(args['rootDir']+'/LMmimic.pkl', map_location=args['device'])
             for param in LM.parameters():
-                param.requires_grad = False
+                param.requires_grad = True
 
             LSTM_IB_GAN_mimic_small.train(self.textData, LM)
         elif args['model_arch'] == 'lstmibcp':
