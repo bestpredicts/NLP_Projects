@@ -29,6 +29,7 @@ parser.add_argument('--use_big_emb', '-be')
 parser.add_argument('--use_new_emb', '-ne')
 parser.add_argument('--date', '-d')
 parser.add_argument('--model_dir', '-md')
+parser.add_argument('--encarch', '-ea')
 cmdargs = parser.parse_args()
 
 usegpu = True
@@ -67,6 +68,12 @@ if cmdargs.model_dir is None:
     args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs_LM2021-05-25.pt"
 else:
     args["model_dir"] = str(cmdargs.model_dir)
+
+
+if cmdargs.encarch is None:
+    args['enc_arch'] = 'rcnn'
+else:
+    args['enc_arch'] = cmdargs.encarch
 
 def asMinutes(s):
     m = math.floor(s / 60)

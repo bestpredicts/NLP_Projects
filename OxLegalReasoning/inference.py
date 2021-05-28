@@ -46,7 +46,7 @@ parser.add_argument('--choose', '-c')
 parser.add_argument('--use_big_emb', '-be')
 parser.add_argument('--use_new_emb', '-ne')
 parser.add_argument('--date', '-d')
-
+parser.add_argument('--encarch', '-ea')
 cmdargs = parser.parse_args()
 
 
@@ -83,11 +83,17 @@ if cmdargs.date is None:
 
 if cmdargs.model_dir is None:
     # args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs2021-05-12.pt"
-    args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs_LM2021-05-25.pt"
+    args['model_dir'] = "./artifacts/RCNN_IB_GAN_be_mimic3_org_embs_LM2021-05-27.pt"
 else:
     args["model_dir"] = "./artifacts/" + str(cmdargs.model_dir)
 
 args['output_dir'] = args['model_dir'][:-3]
+
+
+if cmdargs.encarch is None:
+    args['enc_arch'] = 'rcnn'
+else:
+    args['enc_arch'] = cmdargs.encarch
 
 # Create output directory if needed
 if not os.path.exists(args['output_dir']):

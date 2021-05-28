@@ -14,6 +14,7 @@ parser.add_argument('--choose', '-c')
 parser.add_argument('--use_big_emb', '-be')
 parser.add_argument('--use_new_emb', '-ne')
 parser.add_argument('--date', '-d')
+parser.add_argument('--encarch', '-ea')
 cmdargs = parser.parse_args()
 print(cmdargs)
 usegpu = True
@@ -50,6 +51,12 @@ else:
 
 if cmdargs.date is None:
     args['date'] = str(date.today())
+
+
+if cmdargs.encarch is None:
+    args['enc_arch'] = 'rcnn'
+else:
+    args['enc_arch'] = cmdargs.encarch
 
 #set number of labels
 
