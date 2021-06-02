@@ -31,6 +31,8 @@ import matplotlib.pyplot as plt
 
 import torch
 from torch import nn
+from torch.optim.lr_scheduler import ReduceLROnPlateau, MultiStepLR, \
+    ExponentialLR
 import gensim
 # import fasttext
 from gensim.models import FastText
@@ -51,7 +53,7 @@ from textdataMimic import TextDataMimic
 
 
 
-textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge", trainLM=False, test_phase=False, big_emb = False, new_emb = True)
+textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge", trainLM=False, test_phase=False, big_emb = False, new_emb = False)
         # self.start_token = self.textData.word2index['START_TOKEN']
         # self.end_token = self.textData.word2index['END_TOKEN']
 args['vocabularySize'] = textData.getVocabularySize()
@@ -72,7 +74,7 @@ class LSTM_Model(nn.Module):
         LSTM
     """
 
-    def __init__(self, w2i, i2w, LM, i2v=None, dimension=200):
+    def __init__(self, w2i, i2w, LM, i2v=None, dimension=128):
         """
         Args:
             args: parameters of the model
@@ -82,20 +84,27 @@ class LSTM_Model(nn.Module):
 
         self.word2index = w2i
         self.index2word = i2w
+        self.index2vector = i2v
         self.max_length = 512
+
+
 
         # TODO try using the language model embedding after training!
         #         self.embedding = LM.embedding
-        # self.embedding = nn.Embedding.from_pretrained(torch.FloatTensor(i2v))
+        self.embedding = nn.Embedding.from_pretrained(torch.FloatTensor(i2v))
+        self.emb_size = self.index2vector.shape[1]
+        print(f"self embedding size is: ", self.emb_size)
 
-        self.embedding = nn.Embedding(textData.getVocabularySize(), 200)
+        # print(self.embedding)
+
+        # self.embedding = nn.Embedding(textData.getVocabularySize(), 200)
         self.dimension = dimension
-        self.lstm = nn.LSTM(input_size=200,
+        self.lstm = nn.LSTM(input_size=self.emb_size,
                             hidden_size=self.dimension,
                             num_layers=1,
                             batch_first=True,
                             bidirectional=True)
-        self.drop = nn.Dropout(p=0.5)
+        self.drop = nn.Dropout(p=0.8)
 
         self.fc = nn.Linear(2 * dimension, 1)
 
@@ -149,13 +158,13 @@ def load_checkpoint(load_path, model, optimizer):
     return state_dict['valid_loss']
 
 
-def save_metrics(save_path, train_loss_list, valid_loss_list, global_steps_list):
+def save_metrics(save_path, train_loss_list, valid_loss_list, epoch_num_list):
     if save_path == None:
         return
 
     state_dict = {'train_loss_list': train_loss_list,
                   'valid_loss_list': valid_loss_list,
-                  'global_steps_list': global_steps_list}
+                  'epoch_num_list': epoch_num_list}
 
     torch.save(state_dict, save_path)
     print(f'Model metrics saved to ==> {save_path}')
@@ -168,7 +177,7 @@ def load_metrics(load_path):
     state_dict = torch.load(load_path, map_location=device)
     print(f'Model metrics loaded from <== {load_path}')
 
-    return state_dict['train_loss_list'], state_dict['valid_loss_list'], state_dict['global_steps_list']
+    return state_dict['train_loss_list'], state_dict['valid_loss_list'], state_dict['epoch_num_list']
 
 
 # define metric
@@ -193,24 +202,26 @@ eval_every = 50
 def train(model,
           optimizer,
           criterion=nn.BCELoss(),
-          num_epochs=5,
+          num_epochs=50,
           file_path=destination_folder,
           best_valid_loss=float("Inf")):
     # initialize running values
     running_loss = 0.0
     valid_running_loss = 0.0
     global_step = 0
-    train_loss_list = []
-    valid_loss_list = []
+    epoch_loss_history = []
+    epoch_val_loss_history = []
     global_steps_list = []
 
     batches = textData.getBatches()
-    total_steps = num_epochs*len(batches)
+    total_steps = num_epochs * len(batches)
 
     # training loop
     model.train()
     for epoch in range(num_epochs):
-        print("starting epoch: ", epoch)
+        train_loss_list = []
+        val_loss_list = []
+        print('Epoch-{0} lr: {1}'.format(epoch, optimizer.param_groups[0]['lr']))
 
         for index, batch in enumerate(batches):
             x = {}
@@ -233,63 +244,78 @@ def train(model,
             # update running values
             running_loss += loss.item()
             global_step += 1
+            train_loss_list.append(loss.item())
 
-            print(f"global step is: {global_step}")
-            # evaluation step
-            if global_step % eval_every == 0:
-                print("About to run a validation run")
+        # run validation at end of epoch
+        model.eval()
+        with torch.no_grad():
+            val_batches = textData.getBatches("dev")
 
-                model.eval()
-                with torch.no_grad():
-                    batches = textData.getBatches("dev")
+            #                   # validation loop
+            for index, batch in enumerate(val_batches):
+                x = {}
+                x['enc_input'] = autograd.Variable(torch.LongTensor(batch.encoderSeqs)).to(args['device'])
+                x['enc_len'] = torch.LongTensor(batch.encoder_lens).to(args['device'])
+                x['labels'] = autograd.Variable(torch.FloatTensor(batch.label)).to(args['device'])
 
-                    #                   # validation loop
-                    for index, batch in enumerate(batches):
-                        x = {}
-                        x['enc_input'] = autograd.Variable(torch.LongTensor(batch.encoderSeqs)).to(args['device'])
-                        x['enc_len'] = torch.LongTensor(batch.encoder_lens).to(args['device'])
-                        x['labels'] = autograd.Variable(torch.FloatTensor(batch.label)).to(args['device'])
+                output = model(x['enc_input'], x['enc_len'])
+                loss = criterion(output, x['labels'])
+                valid_running_loss += loss.item()
+                val_loss_list.append(loss.item())
 
-                        output = model(x['enc_input'], x['enc_len'])
-                        loss = criterion(output, x['labels'])
-                        valid_running_loss += loss.item()
+        scheduler.step()
+        # get the epoch train and val losses
+        average_train_loss = running_loss / len(batches)
+        average_valid_loss = valid_running_loss / len(val_batches)
 
-                #                 # evaluation
-                average_train_loss = running_loss / eval_every
-                average_valid_loss = valid_running_loss / len(batches)
-                train_loss_list.append(average_train_loss)
-                valid_loss_list.append(average_valid_loss)
-                global_steps_list.append(global_step)
+        epoch_loss = (sum(train_loss_list)) / len(train_loss_list)
+        #         print(f"epoch training loss: {epoch_loss}")
+        epoch_loss_history.append(epoch_loss)
 
-                #                 # resetting running values
-                running_loss = 0.0
-                valid_running_loss = 0.0
-                model.train()
+        epoch_val_loss = (sum(val_loss_list)) / len(val_loss_list)
+        epoch_val_loss_history.append(epoch_val_loss)
+        global_steps_list.append(global_step)
 
-                # print progress
+        #        # resetting running values
+        running_loss = 0.0
+        valid_running_loss = 0.0
+        model.train()
 
-                print(f"Epoch number: {epoch}. Epoch loss: {average_train_loss}\n Val loss: {average_valid_loss}\n Step {global_step}/{total_steps}")
-                #                 print('Epoch [{}/{}], Step [{}/{}], Train Loss: {:.4f}, Valid Loss: {:.4f}'
-                #                       .format(epoch+1, num_epochs, global_step, num_epochs*len(),
-                #                               average_train_loss, average_valid_loss))
+        # print progress
 
-                # checkpoint
-                if best_valid_loss > average_valid_loss:
-                    best_valid_loss = average_valid_loss
-                    save_checkpoint(file_path + '/model.pt', model, optimizer, best_valid_loss)
-                    save_metrics(file_path + '/metrics.pt', train_loss_list, valid_loss_list, global_steps_list)
-                else:
+        print(
+            f"Epoch number: {epoch}. Epoch loss: {epoch_loss}\n Val loss: {average_valid_loss}\n Step {global_step}/{total_steps}")
 
-                    print("validation loss did not decrease - not saving anything!")
+        # checkpoint
+        if best_valid_loss > average_valid_loss:
+            print("valid loss decreased - saving model")
+            best_valid_loss = average_valid_loss
+            epoch_number_list = list(range(len(epoch_loss_history)))
+            save_checkpoint(file_path + '/model.pt', model, optimizer, best_valid_loss)
+            save_metrics(file_path + '/metrics.pt', train_loss_list, val_loss_list, epoch_number_list)
+        else:
+            print("valid loss did not decrease - not saving!")
 
-    save_metrics(file_path + '/metrics.pt', train_loss_list, valid_loss_list, global_steps_list)
+    epoch_number_list = list(range(len(epoch_loss_history)))
+    save_metrics(file_path + '/metrics.pt', epoch_loss_history, epoch_val_loss_history, epoch_number_list)
     print('Finished Training!')
 
 
-model = LSTM_Model(textData.word2index, textData.index2word, LM=None, i2v=None).to(device)
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+model = LSTM_Model(textData.word2index, textData.index2word, LM=None, i2v=textData.index2vector).to(device)
+optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
+#standard step scheduler
+# scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
 
-train(model=model, optimizer=optimizer, num_epochs=5)
+#multistep
+scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[5,20,50], gamma=0.1)
+
+# scheduler = ReduceLROnPlateau(
+#             optimizer, mode='min', factor=args["lr_decay"],
+#             patience=args["patience"],
+#             threshold=args["threshold"], threshold_mode='rel',
+#             cooldown=args["cooldown"], verbose=True, min_lr=args["min_lr"])
+
+train(model=model, optimizer=optimizer, num_epochs=30)
 
 
 train_loss_list, valid_loss_list, global_steps_list = load_metrics(destination_folder + '/metrics.pt')
@@ -306,6 +332,8 @@ plt.show()
 def evaluate(model, batches=textData.getBatches("test"), threshold=0.5):
     y_pred = []
     y_true = []
+    output_probs_history = []
+
 
     model.eval()
     for index, batch in enumerate(batches):
@@ -314,11 +342,13 @@ def evaluate(model, batches=textData.getBatches("test"), threshold=0.5):
         x['enc_len'] = torch.LongTensor(batch.encoder_lens).to(args['device'])
         x['labels'] = autograd.Variable(torch.FloatTensor(batch.label)).to(args['device'])
 
-        output = model(x['enc_input'], x['enc_len'])
+        output_probs = model(x['enc_input'], x['enc_len'])
+        output_probs_history.extend(output_probs.tolist())
         labels = x['labels']
 
-        output = (output > threshold).int()
-        y_pred.extend(output.tolist())
+        output_labels = (output_probs > threshold).int()
+
+        y_pred.extend(output_labels.tolist())
         y_true.extend(labels.tolist())
 
     print('Classification Report:')
@@ -339,8 +369,15 @@ def evaluate(model, batches=textData.getBatches("test"), threshold=0.5):
     plt.savefig(f"{destination_folder}confusion_matrix.png")
 
 
-best_model = LSTM_Model(textData.word2index, textData.index2word, LM=None, i2v=None).to(device)
-optimizer = optim.Adam(best_model.parameters(), lr=0.001)
+    eval_probs = {}
+    eval_probs["proba"] = output_probs_history
+    eval_probs["pred_label"] = y_pred
+
+    pd.DataFrame(eval_probs).to_csv(f"{destination_folder}lstm_vanilla_eval_probs.csv", index = False)
+
+
+best_model = LSTM_Model(textData.word2index, textData.index2word, LM=None, i2v=textData.index2vector).to(device)
+optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
 
 load_checkpoint(destination_folder + '/model.pt', best_model, optimizer)
 evaluate(best_model)
