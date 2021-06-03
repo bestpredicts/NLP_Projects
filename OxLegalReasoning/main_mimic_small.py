@@ -113,7 +113,7 @@ def timeSince(since, percent):
 
 class Runner:
     def __init__(self):
-        self.model_path = model_path=args['rootDir'] + '/LSTM_IB_GAN_mimic_'+ emb_file_path+'_small'+args['date']+'.mdl'
+        self.model_path =args['rootDir'] + '/LSTM_IB_GAN_mimic_'+ emb_file_path+'_small'+args['date']+'.mdl'
 
     def main(self):
 
@@ -122,7 +122,7 @@ class Runner:
             args['batchSize'] = 64
         elif args['model_arch'] in ['lstmibgan']:
             args['classify_type'] = 'single'
-            args['batchSize'] = 64
+            args['batchSize'] = 128
         elif args['model_arch'] in ['lstmibgan_law']:
             args['classify_type'] = 'single'
             args['batchSize'] = 64

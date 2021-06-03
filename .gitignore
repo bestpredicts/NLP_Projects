@@ -76,3 +76,6 @@ OxLegalReasoning/dead_artifacts/LSTM_IB_GAN_be_mimic3_2021-05-04.pt
 OxLegalReasoning/dead_artifacts/LSTM_IB_GAN_mimic3_030521.mdl
 OxLegalReasoning/dead_artifacts/LSTM_IB_GAN_mimic3_290421.mdl
 BERT_LRP/sample_data/dataset/*
+OxLegalReasoning/results/*
+
+

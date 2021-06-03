@@ -108,8 +108,7 @@ get_sentence_results = True
 sentence = "has experienced acute on chronic diastolic heart failure in the setting of volume overload due to his sepsis prescribed warfarin due to high sys blood pressure 160 "
 # sentence = "High diastolic blood pressure. Wheezy with low blood oxygen levels. Normal resipiratory rate"
 
-textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge",
-                         "./data/mimic3/new_mimic_word2vec_200.model", trainLM=False,
+textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge", trainLM=False,
                          test_phase=False,
                          big_emb=args['big_emb'], new_emb = args["new_emb"])
 

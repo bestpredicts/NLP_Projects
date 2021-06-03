@@ -290,9 +290,45 @@ class LSTM_IB_GAN_Model(nn.Module):
         optional['recon_best'] = recon_loss_mean_all.mean().item()
         optional['I_x_z'] = I_x_z.mean().item()
         optional['zdiff'] = omega.mean().item()
+        # try:
+        #     print("trying to run get_z_stats")
+        #     num_0, num_c, num_1, total = self.get_z_stats(sampled_seq, mask)
+        #     optional["p0"] = num_0 / float(total)
+        #     optional["pc"] = num_c / float(total)
+        #     optional["p1"] = num_1 / float(total)
+        #     optional["p>0.5"] = (z_prob[:, :, 1] * mask > 0.5).sum().item() / float(total)
+        #     optional["p<0.5"] = (z_prob[:, :, 0] * mask > 0.5).sum().item() / float(total)
+        #     optional["selected"] = optional["p1"] + optional["pc"]
+        # except:
+        #     print(optional)
+        #     exit(0)
 
         return recon_loss_mean , recon_loss_mean_all , 0.0003 * I_x_z , 0.005*omega, z_nero_best, z_nero_sampled, output, sampled_seq, sampled_num/wordnum, logpz, optional
 
+    def get_z_stats(self, z=None, mask=None, eps=1e-6):
+        """
+        Computes statistics about how many zs are
+        exactly 0, continuous (between 0 and 1), or exactly 1.
+        :param z:
+        :param mask: mask in [B, T]
+        :return:
+        """
+
+        z = torch.where(mask > 0, z, z.new_full([1], 1e2))
+
+        num_0 = (z < eps).sum().item()
+        num_c = ((eps < z) & (z < 1. - eps)).sum().item()
+        num_1 = ((z > 1. - eps) & (z < 1 + eps)).sum().item()
+
+        total = num_0 + num_c + num_1
+        mask_total = mask.sum().item()
+        try:
+            assert total == mask_total, "total mismatch"
+        except:
+            print(z, mask)
+            print(num_0, num_1, num_c, total, mask_total)
+            assert total == mask_total, "total mismatch"
+        return num_0, num_c, num_1, mask_total
 
     def forward(self, x):
 
@@ -304,7 +340,7 @@ class LSTM_IB_GAN_Model(nn.Module):
         return output, (torch.argmax(output, dim=-1), sampled_words, wordsamplerate)
 
 
-def train(textData, LM, model_path=args['rootDir'] + '/' + args['enc_arch'] + 'SMALL_IB_GAN_be_mimic3_' + emb_file_path+ '_LM' + args['date'] + '.pt', print_every=500, plot_every=10,
+def train(textData, LM, model_path=args['rootDir'] + '/' + args['enc_arch'] + 'SMALL_IB_GAN_be_mimic3_' + emb_file_path+ '_LM' + args['date'] + '.pt', print_every=40, plot_every=10,
           learning_rate=0.001, n_critic=5, eps = 1e-6):
     print('Using small arch...')
     start = time.time()
@@ -511,9 +547,9 @@ def test(textData, model, datasetname, max_accuracy, eps = 1e-6):
                 pppt = True
                 pind = np.random.choice(x['enc_input'].size()[0])
                 for w, choice in zip(batch.encoderSeqs[pind], sampled_words[pind]):
-                    print(" ---\n")
-                    print("w is: ", w)
-                    print("choice is: ", choice)
+                    # print(" ---\n")
+                    # print("w is: ", w)
+                    # print("choice is: ", choice)
                     if choice[1] == 1:
                         print("choice was equal to 1 \n")
                         print('<', textData.index2word[w], '>', end='')

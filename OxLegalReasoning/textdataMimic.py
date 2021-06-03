@@ -66,8 +66,8 @@ class TextDataMimic:
         print("self.new emb in textData is: ", self.new_emb)
         print("self.big emb in textData is: ", self.big_emb)
         if self.new_emb:
-            print("using new embeddings")
-            self.embfile = "./data/mimic3/new_mimic_word2vec_200.model"
+            print("using new strict embeddings")
+            self.embfile = "./data/mimic3/new_mimic_word2vec_200_strict.model"
 
         else:
             print("using original embeddings")
@@ -112,7 +112,7 @@ class TextDataMimic:
         if self.big_emb:
             self.data_dump_path = f"{self.basedir}/mimic3_processed_bigembed_{self.taskname}.pkl"
         elif self.new_emb:
-            self.data_dump_path = f"{self.basedir}/mimic3_processed_new200_{self.taskname}.pkl"
+            self.data_dump_path = f"{self.basedir}/mimic3_processed_new200strict_{self.taskname}.pkl"
         else:
             self.data_dump_path = f"{self.basedir}/mimic3_processed_originalembs_{self.taskname}.pkl"
 
@@ -467,9 +467,9 @@ class TextDataMimic:
 
     def load_all_mimic(self):
         if self.new_emb:
-            self.data_dump_path1 = self.basedir + '/mimic3_processed_new200_3days.pkl'
-            self.data_dump_path2 = self.basedir + '/mimic3_processed_new200_discharge.pkl'
-            self.data_dump_all_path = self.basedir + '/mimic3_processed_new200_all.pkl'
+            self.data_dump_path1 = self.basedir + '/mimic3_processed_new200strict_3days.pkl'
+            self.data_dump_path2 = self.basedir + '/mimic3_processed_new200strict_discharge.pkl'
+            self.data_dump_all_path = self.basedir + '/mimic3_processed_new200strict_all.pkl'
 
         else:
             self.data_dump_path1 = self.basedir + '/mimic3_processed_originalembs_3days.pkl'

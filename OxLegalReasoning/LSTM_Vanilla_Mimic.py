@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.nn.parameter import Parameter
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+import torch.nn.functional as F
 
 import numpy as np
 import datetime
@@ -57,7 +58,7 @@ textData = TextDataMimic("mimic", "../clinicalBERT/data/", "discharge", trainLM=
         # self.start_token = self.textData.word2index['START_TOKEN']
         # self.end_token = self.textData.word2index['END_TOKEN']
 args['vocabularySize'] = textData.getVocabularySize()
-args['chargenum'] = 2
+
 args['embeddingSize'] = textData.index2vector.shape[1]
 
 
@@ -74,7 +75,7 @@ class LSTM_Model(nn.Module):
         LSTM
     """
 
-    def __init__(self, w2i, i2w, LM, i2v=None, dimension=128):
+    def __init__(self, w2i, i2w, LM, i2v=None, dimension=200):
         """
         Args:
             args: parameters of the model
@@ -85,7 +86,7 @@ class LSTM_Model(nn.Module):
         self.word2index = w2i
         self.index2word = i2w
         self.index2vector = i2v
-        self.max_length = 512
+        self.max_length = 1000
 
 
 
@@ -104,9 +105,15 @@ class LSTM_Model(nn.Module):
                             num_layers=1,
                             batch_first=True,
                             bidirectional=True)
-        self.drop = nn.Dropout(p=0.8)
+        self.drop = nn.Dropout(p=0.1)
 
+        # self.max_pool = torch.max()
+        self.fc_max = nn.Linear(1,50)
+        self.fc_max2 = nn.Linear(50,1)
         self.fc = nn.Linear(2 * dimension, 1)
+
+
+
 
     def forward(self, text, text_len):
         #         self.encoderInputs = encoderInputs.to(args['device'])
@@ -116,17 +123,46 @@ class LSTM_Model(nn.Module):
         text_len = text_len.cpu()
 
         packed_input = pack_padded_sequence(text_emb, text_len, batch_first=True, enforce_sorted=False)
-        packed_output, _ = self.lstm(packed_input)
+        packed_output,  (h_n, c_n) = self.lstm(packed_input)
         output, _ = pad_packed_sequence(packed_output, batch_first=True)
+
+        # print(f"output shape is: {output.shape}")
+        # print(f"h_n shape is : {h_n.shape}" )
 
         out_forward = output[range(len(output)), text_len - 1, :self.dimension]
         out_reverse = output[:, 0, self.dimension:]
         out_reduced = torch.cat((out_forward, out_reverse), 1)
+        # print("out reduced shape is: ", out_reduced.shape)
         text_fea = self.drop(out_reduced)
+        # print(f"text feature after concat is: ", text_fea)
+        # print("concated output shape: ", out_reduced.shape)
+        max_pooled,_ = torch.max(text_fea,1)
 
-        text_fea = self.fc(text_fea)
-        text_fea = torch.squeeze(text_fea, 1)
-        text_out = torch.sigmoid(text_fea)
+        max_pooled = torch.unsqueeze(max_pooled,1)
+        # print(f"max pooled shape is: {max_pooled.shape}")
+        max_out1 = self.fc_max(max_pooled)
+        # print(f"max out1 shape before rect is: ", max_out1.shape)
+        max_out1 = F.relu(max_out1)
+        # print(f"max_out1 after relu is: ", max_out1)
+        # print(f"max out1 shape after relu is: ", max_out1.shape)
+        max_out_final = self.fc_max2(max_out1)
+        # print(f"max final shape is: ", max_out_final.shape)
+
+
+
+        # print(max_pooled)
+
+
+        #use this for max pooling
+        text_out = torch.squeeze(max_out_final,1)
+        text_out = torch.sigmoid(text_out)
+
+
+        #use this if not using max pool
+        # text_fea = self.fc(text_fea)
+        # text_fea = torch.squeeze(text_fea, 1)
+        # text_out = torch.sigmoid(text_fea)
+        # print(f"text out is: {text_out}")
 
         return text_out
 
@@ -191,7 +227,7 @@ def binary_accuracy(preds, y):
 
 
 # Training Function
-destination_folder = "./results/LSTM_Vanilla/"
+destination_folder = "./results/LSTM_Vanilla_strict/"
 if not os.path.exists(destination_folder):
     os.makedirs(destination_folder)
 device = args["device"]
@@ -302,7 +338,7 @@ def train(model,
 
 
 model = LSTM_Model(textData.word2index, textData.index2word, LM=None, i2v=textData.index2vector).to(device)
-optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
+optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=4e-3)
 #standard step scheduler
 # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
 
@@ -315,7 +351,7 @@ scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[5,20,50]
 #             threshold=args["threshold"], threshold_mode='rel',
 #             cooldown=args["cooldown"], verbose=True, min_lr=args["min_lr"])
 
-train(model=model, optimizer=optimizer, num_epochs=30)
+train(model=model, optimizer=optimizer, num_epochs=10)
 
 
 train_loss_list, valid_loss_list, global_steps_list = load_metrics(destination_folder + '/metrics.pt')
@@ -343,10 +379,14 @@ def evaluate(model, batches=textData.getBatches("test"), threshold=0.5):
         x['labels'] = autograd.Variable(torch.FloatTensor(batch.label)).to(args['device'])
 
         output_probs = model(x['enc_input'], x['enc_len'])
+
+        # print(f"output probs: {output_probs}")
         output_probs_history.extend(output_probs.tolist())
         labels = x['labels']
 
         output_labels = (output_probs > threshold).int()
+
+        # print(f"output labels: {output_labels}")
 
         y_pred.extend(output_labels.tolist())
         y_true.extend(labels.tolist())
@@ -367,6 +407,7 @@ def evaluate(model, batches=textData.getBatches("test"), threshold=0.5):
     ax.yaxis.set_ticklabels(['not ra', 'ra'])
 
     plt.savefig(f"{destination_folder}confusion_matrix.png")
+    plt.show()
 
 
     eval_probs = {}
